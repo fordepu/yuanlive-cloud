@@ -4,6 +4,7 @@ import blog.yuanyuan.yuanlive.common.exception.ApiException;
 import blog.yuanyuan.yuanlive.common.result.ResultPage;
 import blog.yuanyuan.yuanlive.entity.live.entity.LiveCategory;
 import blog.yuanyuan.yuanlive.entity.live.entity.LiveCategoryRelation;
+import blog.yuanyuan.yuanlive.entity.live.entity.LiveRoom;
 import blog.yuanyuan.yuanlive.live.domain.dto.LiveCategoryDTO;
 import blog.yuanyuan.yuanlive.live.domain.dto.LiveCategoryQueryDTO;
 import blog.yuanyuan.yuanlive.live.domain.vo.HotCategoryVO;
@@ -12,6 +13,7 @@ import blog.yuanyuan.yuanlive.live.domain.vo.LiveCategoryVO;
 import blog.yuanyuan.yuanlive.entity.live.vo.LiveRoomRankVO;
 import blog.yuanyuan.yuanlive.live.domain.vo.LiveChildVO;
 import blog.yuanyuan.yuanlive.live.mapper.LiveCategoryMapper;
+import blog.yuanyuan.yuanlive.live.mapper.LiveRoomMapper;
 import blog.yuanyuan.yuanlive.live.properties.LiveRoomProperties;
 import blog.yuanyuan.yuanlive.live.service.LiveCategoryRelationService;
 import blog.yuanyuan.yuanlive.live.service.LiveCategoryService;
@@ -49,6 +51,8 @@ public class LiveCategoryServiceImpl extends ServiceImpl<LiveCategoryMapper, Liv
     private PopularityUtil popularityUtil;
     @Resource
     private LiveCategoryMapper liveCategoryMapper;
+    @Resource
+    private LiveRoomMapper liveRoomMapper;
     @Resource
     private LiveCategoryRelationService liveCategoryRelationService;
     @Value("${live.hot.hot-categories}")
@@ -268,7 +272,13 @@ public class LiveCategoryServiceImpl extends ServiceImpl<LiveCategoryMapper, Liv
             throw new ApiException("该分类下存在子分类，请先删除子分类");
         }
         
-        // TODO: 检查是否有直播间使用该分类
+        LambdaQueryWrapper<LiveRoom> roomCheckQuery = new LambdaQueryWrapper<>();
+        roomCheckQuery.in(LiveRoom::getCategoryId, ids);
+        Long roomCount = liveRoomMapper.selectCount(roomCheckQuery);
+        if (roomCount != null && roomCount > 0) {
+            log.warn("分类仍被直播间使用，不能删除: categoryIds={}, roomCount={}", ids, roomCount);
+            throw new ApiException("该分类仍被" + roomCount + "个直播间使用，不能删除");
+        }
         
         // 删除分类及其关联关系
         boolean result = this.removeByIds(ids);
@@ -634,7 +644,6 @@ public class LiveCategoryServiceImpl extends ServiceImpl<LiveCategoryMapper, Liv
         return tree;
     }
 }
-
 
 
 

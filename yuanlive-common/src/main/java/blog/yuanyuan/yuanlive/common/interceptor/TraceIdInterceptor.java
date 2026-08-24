@@ -22,6 +22,8 @@ public class TraceIdInterceptor implements HandlerInterceptor {
             traceId = IdUtil.fastSimpleUUID();
         }
 
+        response.setHeader(TRACE_ID_KEY, traceId);
+
         // 2. 放入 MDC
         MDC.put(TRACE_ID_KEY, traceId);
         log.info("========================================== Start ==========================================");

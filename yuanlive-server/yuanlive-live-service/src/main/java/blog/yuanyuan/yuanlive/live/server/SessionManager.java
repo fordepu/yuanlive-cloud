@@ -75,14 +75,22 @@ public class SessionManager {
      */
     public void remove(Channel channel) {
         String traceId = channel.attr(KEY_TRACE_ID).get();
-        MDC.put("traceId", traceId);
+        if (traceId != null) {
+            MDC.put("traceId", traceId);
+        }
         try {
             Long userId = channel.attr(KEY_USER_ID).get();
+            String roomId = channel.attr(KEY_ROOM_ID).get();
+            if (userId != null) {
+                MDC.put("userId", String.valueOf(userId));
+            }
+            if (roomId != null) {
+                MDC.put("roomId", roomId);
+            }
             if (userId != null) {
                 USER_MAP.remove(userId);
                 log.info("用户[{}] 断开连接", userId);
                 // 执行离场 Lua 脚本
-                String roomId = channel.attr(KEY_ROOM_ID).get();
                 // 如果 roomId 不为空
                 if (StrUtil.isNotBlank(roomId)) {
                     String currentKey = liveRoomProperties.getCurrentPrefix() + roomId;
@@ -93,6 +101,8 @@ public class SessionManager {
             // Netty 的 ChannelGroup 会自动移除断开的 Channel，不需要手动操作 ROOM_MAP
         } finally {
             MDC.remove("traceId");
+            MDC.remove("userId");
+            MDC.remove("roomId");
         }
     }
 

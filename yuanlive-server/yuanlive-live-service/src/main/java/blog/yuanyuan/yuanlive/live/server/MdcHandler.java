@@ -50,9 +50,19 @@ public class MdcHandler extends ChannelDuplexHandler {
         if (traceId != null) {
             MDC.put(TRACE_ID_KEY, traceId);
         }
+        Long userId = ctx.channel().attr(SessionManager.KEY_USER_ID).get();
+        if (userId != null) {
+            MDC.put("userId", String.valueOf(userId));
+        }
+        String roomId = ctx.channel().attr(SessionManager.KEY_ROOM_ID).get();
+        if (roomId != null) {
+            MDC.put("roomId", roomId);
+        }
     }
 
     private void clearMdc() {
         MDC.remove(TRACE_ID_KEY);
+        MDC.remove("userId");
+        MDC.remove("roomId");
     }
 }

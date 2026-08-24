@@ -1,6 +1,7 @@
 package blog.yuanyuan.yuanlive.gateway.filter;
 
 import cn.hutool.core.util.IdUtil;
+import cn.hutool.core.util.StrUtil;
 import lombok.extern.slf4j.Slf4j;
 import org.slf4j.MDC;
 import org.springframework.cloud.gateway.filter.GatewayFilterChain;
@@ -11,16 +12,14 @@ import org.springframework.stereotype.Component;
 import org.springframework.web.server.ServerWebExchange;
 import reactor.core.publisher.Mono;
 
-import java.util.UUID;
-
 @Component
 @Slf4j
 public class TraceIdFilter implements GlobalFilter, Ordered {
     private static final String TRACE_ID_HEADER = "traceId";
     @Override
     public Mono<Void> filter(ServerWebExchange exchange, GatewayFilterChain chain) {
-        // 1. 生成 TraceId (如果前端没传的话)
-        String traceId = IdUtil.fastSimpleUUID();
+        String incomingTraceId = exchange.getRequest().getHeaders().getFirst(TRACE_ID_HEADER);
+        String traceId = StrUtil.isBlank(incomingTraceId) ? IdUtil.fastSimpleUUID() : incomingTraceId;
 
         // 2. 放入 MDC (为了让网关自己的日志也能打印出 ID)
         // 注意：WebFlux 中 MDC 支持有限，但这行能保证当前线程的日志有 ID
@@ -29,8 +28,9 @@ public class TraceIdFilter implements GlobalFilter, Ordered {
 
         // 3. 放入 Request Header (传递给下游微服务)
         ServerHttpRequest newRequest = exchange.getRequest().mutate()
-                .header(TRACE_ID_HEADER, traceId)
+                .headers(headers -> headers.set(TRACE_ID_HEADER, traceId))
                 .build();
+        exchange.getResponse().getHeaders().set(TRACE_ID_HEADER, traceId);
 
         return chain.filter(exchange.mutate().request(newRequest).build())
                 .doFinally(signalType -> {
