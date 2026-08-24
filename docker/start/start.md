@@ -1,8 +1,54 @@
 # yuanlive项目部署文档
 
+## 0. Docker 基础设施分层启动
+
+Java 微服务继续在 IDE 或 Maven 中运行，Docker Compose 只负责启动基础设施。项目使用同一个 `docker/docker-compose.yml`，通过两个 Profile 控制启动范围，不需要维护多份 Compose 文件。
+
+### 基础层（默认）
+
+启动 MySQL、Nacos、Redis 和 RabbitMQ，适合只进行基础接口开发：
+
+```bash
+cd docker
+docker compose up -d
+```
+
+### 微服务依赖层（推荐）
+
+启动基础层以及运行主要微服务所需的 MongoDB、Elasticsearch、MinIO、SRS、SearXNG 和 XXL-JOB：
+
+```bash
+cd docker
+docker compose --profile app up -d
+```
+
+该命令是日常启动用户、直播和 AI 微服务的推荐方式。Java 服务仍使用本机地址，例如 `localhost:3307`、`localhost:6378`、`localhost:5672` 和 `localhost:8848`。
+
+### 可选重型组件层
+
+仅在需要分布式事务、流处理、日志分析、Sentinel 或 Higress 时启动：
+
+```bash
+cd docker
+docker compose --profile app --profile extra up -d
+```
+
+`extra` 层包含 Seata、Sentinel、Flink、Kibana、Logstash、Filebeat 和 Higress；Elasticsearch 会随该层一并启动。停止当前 Compose 项目的所有容器：
+
+```bash
+docker compose down
+```
+
+首次启动或修改 Profile 后，建议检查实际启用的服务：
+
+```bash
+docker compose --profile app config --services
+docker compose --profile app --profile extra config --services
+```
+
 ## 1. seata 配置
 
-- 首先通过compose.yml启动下载容器 (***注意nacos与seata可能会启动失败，等待几秒即可***)
+- 使用 `docker compose --profile app --profile extra up -d` 启动包含 Seata 的基础设施（注意 Nacos 与 Seata 首次启动可能需要等待几秒）。
 
 - 登录[nacos](http://localhost:8034),初始账号密码均为`nacos`
 
@@ -231,7 +277,7 @@
   }
   ```
 
-- docker compose后通过访问[kibana](http://localhost:5601)进入可视化界面
+- 使用 `docker compose --profile app --profile extra up -d` 启动 ELK 后，通过访问 [kibana](http://localhost:5601) 进入可视化界面。
 
 - 选择`Management` -> `Stack Management` -> `Data Views` -> `Create data view`
 
@@ -241,7 +287,7 @@
 
 - 创建后进入`Discover`查看日志
 
-- 每次重启后需要通过 `docker compose up -d --force-recreate filebeat` 重新创建容器
+- 每次重启后需要通过 `docker compose --profile app --profile extra up -d --force-recreate filebeat` 重新创建容器
 
 ## 7. Naco配置
 
@@ -282,7 +328,7 @@
     
     - 将`yuanlive-live-service`微服务下`application.yml`中的`file-preifx.host-prefix`修改为自己的`SrsConfig`实际存储目录
     
-    - 重新构建运行一下`srs`容器，否则有可能因为目录权限问题导致无法迁移录播视频，可以选择使用`docker compose up -d --force-recreate srs`指令
+    - 重新构建运行一下 `srs` 容器，否则有可能因为目录权限问题导致无法迁移录播视频，可以选择使用 `docker compose --profile app up -d --force-recreate srs` 指令
     
     - 执行以下两条指令设置存储桶的`chunks`目录过期时间
       
