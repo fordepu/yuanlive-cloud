@@ -10,6 +10,7 @@ import blog.yuanyuan.yuanlive.live.domain.dto.SrsCallBackDTO;
 import blog.yuanyuan.yuanlive.live.domain.vo.LiveRoomDetailVO;
 import blog.yuanyuan.yuanlive.entity.live.vo.LiveRoomVO;
 import blog.yuanyuan.yuanlive.entity.live.vo.LiveRoomRankVO;
+import blog.yuanyuan.yuanlive.feign.live.dto.GiftRoomValidationResult;
 import blog.yuanyuan.yuanlive.live.service.LiveRoomService;
 import cn.dev33.satoken.annotation.SaCheckRole;
 import cn.dev33.satoken.stp.StpUtil;
@@ -100,6 +101,12 @@ public class LiveRoomController {
         log.debug("token为: {}", attributes.getRequest().getHeader("token"));
         LiveRoomDetailVO detail = liveRoomService.getRoomDetail(roomId);
         return Result.success(detail);
+    }
+
+    @GetMapping("/gift-validation/{roomId}")
+    @Operation(summary = "校验直播间是否可接收礼物")
+    public Result<GiftRoomValidationResult> validateGiftRoom(@PathVariable("roomId") Long roomId) {
+        return Result.success(liveRoomService.validateGiftRoom(roomId));
     }
 
     @GetMapping("/myRoom")

@@ -33,6 +33,7 @@ import lombok.experimental.SuperBuilder;
         @JsonSubTypes.Type(value = PingMessage.class, name = "PING"),
         @JsonSubTypes.Type(value = PongMessage.class, name = "PONG"),
         @JsonSubTypes.Type(value = GroupChatRequest.class, name = "CHAT"),
+        @JsonSubTypes.Type(value = LikeRequest.class, name = "LIKE"),
         @JsonSubTypes.Type(value = GroupChatNotification.class, name = "CHAT_NOTIFY"),
         @JsonSubTypes.Type(value = SingleChatRequest.class, name = "SINGLE_CHAT"),
         @JsonSubTypes.Type(value = AckMessage.class, name = "ACK"),

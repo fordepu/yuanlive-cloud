@@ -4,9 +4,12 @@ import blog.yuanyuan.yuanlive.live.message.*;
 import blog.yuanyuan.yuanlive.live.message.request.GroupChatRequest;
 import blog.yuanyuan.yuanlive.live.message.request.JoinRequest;
 import blog.yuanyuan.yuanlive.live.message.request.LeaveRequest;
+import blog.yuanyuan.yuanlive.live.message.request.LikeRequest;
 import blog.yuanyuan.yuanlive.live.message.request.PingMessage;
+import blog.yuanyuan.yuanlive.live.message.response.AckMessage;
 import blog.yuanyuan.yuanlive.live.service.LiveMessageService;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.fasterxml.jackson.core.JsonProcessingException;
 import io.netty.channel.ChannelHandler;
 import io.netty.channel.ChannelHandlerContext;
 import io.netty.channel.SimpleChannelInboundHandler;
@@ -45,7 +48,14 @@ public class NettyServerHandler extends SimpleChannelInboundHandler<TextWebSocke
     protected void channelRead0(ChannelHandlerContext ctx, TextWebSocketFrame frame) throws Exception {
         // 1. 解析消息
 //        log.info("收到消息: {}", frame.text());
-        Message message = objectMapper.readValue(frame.text(), Message.class);
+        Message message;
+        try {
+            message = objectMapper.readValue(frame.text(), Message.class);
+        } catch (JsonProcessingException exception) {
+            // Jackson 多态反序列化会在未知 cmd 时失败；这里转换成协议 ACK，避免异常直接关闭 WebSocket。
+            sendProtocolError(ctx, "消息格式错误或不支持的 cmd");
+            return;
+        }
 //        log.info("收到消息: {}", message);
         if (message == null) return;
 
@@ -58,8 +68,19 @@ public class NettyServerHandler extends SimpleChannelInboundHandler<TextWebSocke
             case JOIN_ROOM -> liveMessageService.handleJoinRoom(ctx, (JoinRequest) message);
             case CHAT -> liveMessageService.handleChat(ctx, (GroupChatRequest) message);
             case LEAVE_ROOM -> liveMessageService.handleLeaveRoom(ctx, (LeaveRequest) message);
-            default -> liveMessageService.handleGenericMessage(ctx, message);
+            case LIKE -> liveMessageService.handleLike(ctx, (LikeRequest) message);
+            default -> sendProtocolError(ctx, "不支持的 cmd: " + message.getCmd());
         }
+    }
+
+    private void sendProtocolError(ChannelHandlerContext ctx, String message) {
+        AckMessage response = AckMessage.builder()
+                .code(400)
+                .success(false)
+                .message(message)
+                .timestamp(System.currentTimeMillis() / 1000)
+                .build();
+        ctx.channel().writeAndFlush(new TextWebSocketFrame(objectMapper.valueToTree(response).toString()));
     }
 
     // 处理心跳超时 (IdleStateHandler 触发)

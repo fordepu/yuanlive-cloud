@@ -11,6 +11,7 @@ import blog.yuanyuan.yuanlive.live.domain.dto.SrsCallBackDTO;
 import blog.yuanyuan.yuanlive.live.domain.vo.LiveRoomDetailVO;
 import blog.yuanyuan.yuanlive.entity.live.vo.LiveRoomVO;
 import blog.yuanyuan.yuanlive.entity.live.vo.LiveRoomRankVO;
+import blog.yuanyuan.yuanlive.feign.live.dto.GiftRoomValidationResult;
 import com.baomidou.mybatisplus.extension.service.IService;
 
 import java.util.List;
@@ -81,4 +82,6 @@ public interface LiveRoomService extends IService<LiveRoom> {
     ResultPage<VideoResource> searchVideos(String keyword, Integer pageNum, Integer pageSize);
 
     ResultPage<SearchVO> search(SearchQueryDTO searchQueryDTO);
+
+    GiftRoomValidationResult validateGiftRoom(Long roomId);
 }

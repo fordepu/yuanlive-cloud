@@ -200,6 +200,21 @@ public class LiveMessageServiceImpl implements LiveMessageService {
                 .timestamp(System.currentTimeMillis() / 1000)
                 .code(200)
                 .build();
+        if (chat.getData() == null) {
+            ack.setSuccess(false);
+            ack.setCode(400);
+            ack.setMessage("消息内容不能为空");
+            sendMsg(ctx, ack);
+            return;
+        }
+        if ("gift".equals(chat.getData().getType())) {
+            // 资金订单必须经过 wallet-service 的幂等事务，Netty 只接收普通文本聊天。
+            ack.setSuccess(false);
+            ack.setCode(400);
+            ack.setMessage("请使用送礼订单接口");
+            sendMsg(ctx, ack);
+            return;
+        }
         String roomId = ctx.channel().attr(SessionManager.KEY_ROOM_ID).get();
         boolean exists = checkRoom(roomId);
         if (roomId == null || !exists) {
@@ -208,7 +223,7 @@ public class LiveMessageServiceImpl implements LiveMessageService {
             sendMsg(ctx, ack);
             return;
         }
-        if (StrUtil.isBlank(chat.getData().getContent()) && !"gift".equals(chat.getData().getType())) {
+        if (StrUtil.isBlank(chat.getData().getContent())) {
             ack.setSuccess(false);
             ack.setMessage("发送内容不能为空");
             sendMsg(ctx, ack);
@@ -233,12 +248,6 @@ public class LiveMessageServiceImpl implements LiveMessageService {
         chatData.setContent(chat.getData().getContent());
         chatData.setIsVip(false);  // TODO: 从用户信息中获取
         chatData.setLevel(0);      // TODO: 从用户信息中获取
-
-        // 如果是礼物消息，设置礼物相关字段
-        if ("gift".equals(chat.getData().getType())) {
-            chatData.setGiftIcon(chat.getData().getGiftIcon());
-            chatData.setGiftCount(chat.getData().getGiftCount());
-        }
 
         GroupChatNotification notification = GroupChatNotification.builder()
                 .data(chatData)

@@ -27,6 +27,8 @@ public class LiveRoom {
     private String coverImg;
     @Schema(description="直播状态 0:未开播 1:直播中")
     private Integer roomStatus;
+    @Schema(description = "是否允许接收礼物")
+    private Boolean acceptingGifts;
     @Schema(description="当前在线人数")
     private Integer viewCount;
     @Schema(description="分类ID")

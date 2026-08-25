@@ -15,17 +15,32 @@ spring:
       - nacos:redis.yaml?group=REDIS_GROUP&refresh-enabled=true
       - nacos:rabbitmq.yaml?group=DEFAULT_GROUP&refresh-enabled=true
   datasource:
-    url: jdbc:mysql://localhost:3307/yuanlive_user?useSSL=false&serverTimezone=Asia/Shanghai&useUnicode=true&characterEncoding=utf-8
+    url: jdbc:mysql://localhost:3307/yuanlive_wallet?useSSL=false&serverTimezone=Asia/Shanghai&useUnicode=true&characterEncoding=utf-8
     username: root
     password: yuanlive
     driver-class-name: com.mysql.cj.jdbc.Driver
+  rabbitmq:
+    publisher-confirm-type: correlated
+    publisher-returns: true
+    template:
+      mandatory: true
 
 mybatis-plus:
   mapper-locations: classpath*:mapper/*.xml
   type-aliases-package: blog.yuanyuan.yuanlive.entity.wallet.entity
   global-config:
     db-config:
-      id-type: auto
+      id-type: input
+
+wallet:
+  recharge:
+    # 真实支付接入前，模拟回调默认关闭，只能由开发或测试环境显式开启。
+    simulation-enabled: ${WALLET_RECHARGE_SIMULATION_ENABLED:false}
+  outbox:
+    publish-interval-ms: ${WALLET_OUTBOX_PUBLISH_INTERVAL_MS:1000}
+    batch-size: ${WALLET_OUTBOX_BATCH_SIZE:50}
+    lease-seconds: ${WALLET_OUTBOX_LEASE_SECONDS:30}
+    max-retries: ${WALLET_OUTBOX_MAX_RETRIES:8}
 
 cosid:
   namespace: ${spring.application.name}

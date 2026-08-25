@@ -1,0 +1,33 @@
+spring:
+  application:
+    name: live-service-test
+  rabbitmq:
+    publisher-confirm-type: correlated
+    publisher-returns: true
+    template:
+      mandatory: true
+  cloud:
+    nacos:
+      config:
+        enabled: false
+      discovery:
+        enabled: false
+  data:
+    redis:
+      repositories:
+        enabled: false
+
+cosid:
+  namespace: live-service-test
+  machine:
+    enabled: true
+    distributor:
+      type: manual
+      manual:
+        machine-id: 1
+    guarder:
+      enabled: false
+  generator:
+    enabled: true
+  snowflake:
+    enabled: true

@@ -33,10 +33,13 @@ services:
       - "3307:3306"
     environment:
       MYSQL_ROOT_PASSWORD: yuanlive
+      # 首次初始化时由官方镜像创建钱包库，挂载的统一 DDL 在该库中建表。
+      MYSQL_DATABASE: yuanlive_wallet
       TZ: Asia/Shanghai
     volumes:
       - ./mysql/data:/var/lib/mysql
       - ./mysql/init:/docker-entrypoint-initdb.d
+      - ../yuanlive-server/yuanlive-wallet-service/src/main/resources/db/wallet-schema.sql:/docker-entrypoint-initdb.d/wallet-schema.sql:ro
     command: --character-set-server=utf8mb4 --collation-server=utf8mb4_unicode_ci
     networks:
       - live-net

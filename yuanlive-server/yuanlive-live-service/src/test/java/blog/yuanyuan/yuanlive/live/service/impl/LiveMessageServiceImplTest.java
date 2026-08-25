@@ -53,4 +53,29 @@ class LiveMessageServiceImplTest {
         assertTrue(response.contains("ACK"));
         assertTrue(response.contains("直播间未开播"));
     }
+
+    @Test
+    void rejectsGiftChatAndRequiresGiftOrderApi() {
+        LiveMessageServiceImpl service = new LiveMessageServiceImpl();
+        StringRedisTemplate redis = mock(StringRedisTemplate.class);
+        ReflectionTestUtils.setField(service, "stringRedisTemplate", redis);
+
+        ChannelHandlerContext context = mock(ChannelHandlerContext.class);
+        Channel channel = mock(Channel.class);
+        when(context.channel()).thenReturn(channel);
+
+        GroupChatRequest request = new GroupChatRequest();
+        request.setMsgId("gift-chat-1");
+        GroupChatRequest.ChatData data = new GroupChatRequest.ChatData();
+        data.setType("gift");
+        data.setGiftCount(1);
+        request.setData(data);
+
+        service.handleChat(context, request);
+
+        ArgumentCaptor<TextWebSocketFrame> frameCaptor = ArgumentCaptor.forClass(TextWebSocketFrame.class);
+        verify(channel).writeAndFlush(frameCaptor.capture());
+        String response = frameCaptor.getValue().text();
+        assertTrue(response.contains("请使用送礼订单接口"));
+    }
 }

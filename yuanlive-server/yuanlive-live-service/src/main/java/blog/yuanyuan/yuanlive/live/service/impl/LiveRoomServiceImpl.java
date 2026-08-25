@@ -26,6 +26,8 @@ import blog.yuanyuan.yuanlive.live.message.notification.LiveStartMessage;
 import blog.yuanyuan.yuanlive.live.properties.LiveRoomProperties;
 import blog.yuanyuan.yuanlive.live.service.LiveCategoryService;
 import blog.yuanyuan.yuanlive.live.service.LiveRoomService;
+import blog.yuanyuan.yuanlive.live.service.GiftRoomValidationPolicy;
+import blog.yuanyuan.yuanlive.feign.live.dto.GiftRoomValidationResult;
 import blog.yuanyuan.yuanlive.live.service.VideoResourceService;
 import blog.yuanyuan.yuanlive.live.util.PopularityUtil;
 import blog.yuanyuan.yuanlive.live.util.VideoProcessResult;
@@ -115,6 +117,8 @@ public class LiveRoomServiceImpl extends ServiceImpl<LiveRoomMapper, LiveRoom>
     private LiveRoomProperties liveRoomProperties;
     @Resource
     private PopularityUtil popularityUtil;
+    @Resource
+    private GiftRoomValidationPolicy giftRoomValidationPolicy;
 
     @Override
     @Transactional(rollbackFor = Exception.class)
@@ -674,6 +678,12 @@ public class LiveRoomServiceImpl extends ServiceImpl<LiveRoomMapper, LiveRoom>
     }
 
     @Override
+    public GiftRoomValidationResult validateGiftRoom(Long roomId) {
+        // 房间预校验只读取直播状态；钱包扣款和账务仍必须由 wallet-service 的本地事务处理。
+        return giftRoomValidationPolicy.validate(getById(roomId));
+    }
+
+    @Override
     public LiveRoomVO getAnchorRoom(Long anchorId) {
         LiveRoom liveRoom = lambdaQuery()
                 .eq(LiveRoom::getAnchorId, anchorId)
@@ -753,7 +763,5 @@ public class LiveRoomServiceImpl extends ServiceImpl<LiveRoomMapper, LiveRoom>
         return String.format("http://localhost:18080/live/%d.flv", roomId);
     }
 }
-
-
 
 

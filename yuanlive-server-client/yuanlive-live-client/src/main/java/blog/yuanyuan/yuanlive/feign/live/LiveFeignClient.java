@@ -8,6 +8,8 @@ import blog.yuanyuan.yuanlive.entity.live.vo.LiveRoomRankVO;
 import blog.yuanyuan.yuanlive.entity.live.vo.LiveRoomVO;
 import blog.yuanyuan.yuanlive.entity.live.vo.SearchVO;
 import blog.yuanyuan.yuanlive.entity.live.vo.UnseenVO;
+import blog.yuanyuan.yuanlive.feign.live.dto.GiftRoomValidationResult;
+import blog.yuanyuan.yuanlive.feign.live.dto.LiveInboxQueryResult;
 import io.swagger.v3.oas.annotations.Operation;
 import org.springdoc.core.annotations.ParameterObject;
 import org.springframework.cloud.openfeign.FeignClient;
@@ -33,4 +35,10 @@ public interface LiveFeignClient {
 
     @PostMapping("/room/create")
     public Result<String> createRoom(@RequestBody @Validated LiveRoomDTO roomDTO);
+
+    @GetMapping("/room/gift-validation/{roomId}")
+    Result<GiftRoomValidationResult> validateGiftRoom(@PathVariable("roomId") Long roomId);
+
+    @GetMapping("/internal/live/inbox/{eventId}")
+    Result<LiveInboxQueryResult> getInbox(@PathVariable("eventId") String eventId);
 }

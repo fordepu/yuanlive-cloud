@@ -1,0 +1,33 @@
+spring:
+  application:
+    name: wallet-service-test
+  cloud:
+    nacos:
+      config:
+        enabled: false
+      discovery:
+        enabled: false
+  rabbitmq:
+    listener:
+      simple:
+        auto-startup: false
+
+cosid:
+  namespace: wallet-service-test
+  machine:
+    enabled: true
+    distributor:
+      type: manual
+      manual:
+        machine-id: 1
+    guarder:
+      enabled: false
+  generator:
+    enabled: true
+  snowflake:
+    enabled: true
+
+wallet:
+  outbox:
+    # 集成测试直接调用发布器，避免后台调度跨越 Testcontainer 生命周期污染其他用例。
+    publish-interval-ms: 3600000

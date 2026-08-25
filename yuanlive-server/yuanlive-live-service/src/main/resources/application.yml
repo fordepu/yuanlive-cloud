@@ -3,6 +3,11 @@ server:
 spring:
   application:
     name: live-service
+  rabbitmq:
+    publisher-confirm-type: correlated
+    publisher-returns: true
+    template:
+      mandatory: true
   ai:
     mcp:
       server:
@@ -53,6 +58,13 @@ spring:
     username: root
     password: yuanlive
     driver-class-name: com.mysql.cj.jdbc.Driver
+  flyway:
+    enabled: true
+    locations: classpath:db/migration
+    # 既有直播库没有版本历史，先以 0 建立基线，确保首个正式迁移仍会执行。
+    baseline-on-migrate: true
+    baseline-version: "0"
+    validate-on-migrate: true
 
 
 mybatis-plus:

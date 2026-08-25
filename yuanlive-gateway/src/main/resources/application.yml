@@ -41,6 +41,13 @@ spring:
               filters:
                 - StripPrefix=1
 
+            - id: wallet-service
+              uri: lb://wallet-service
+              predicates:
+                - Path=/wallet/**
+              filters:
+                - StripPrefix=1
+
             - id: websocket-route
               uri: lb:ws://live-service
               predicates:
