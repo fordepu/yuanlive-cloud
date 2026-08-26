@@ -1,7 +1,9 @@
 package blog.yuanyuan.yuanlive.wallet.infrastructure.outbox;
 
+import blog.yuanyuan.yuanlive.common.metrics.StageOneMetrics;
 import blog.yuanyuan.yuanlive.wallet.config.WalletDomainTopology;
 import jakarta.annotation.PostConstruct;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.amqp.core.Message;
@@ -24,6 +26,9 @@ public class RabbitOutboxPublishGateway implements OutboxPublishGateway {
 
     private final RabbitTemplate rabbitTemplate;
     private final OutboxStatusService outboxStatusService;
+
+    @Autowired(required = false)
+    private StageOneMetrics metrics;
 
     public RabbitOutboxPublishGateway(RabbitTemplate rabbitTemplate, OutboxStatusService outboxStatusService) {
         this.rabbitTemplate = rabbitTemplate;
@@ -50,11 +55,13 @@ public class RabbitOutboxPublishGateway implements OutboxPublishGateway {
         CorrelationData correlationData = new CorrelationData(claim.eventId());
         correlationData.getFuture().whenComplete((confirm, failure) -> {
             if (failure != null) {
+                if (metrics != null) metrics.outboxPublishFailed();
                 outboxStatusService.markFailed(
                         claim.eventId(), claim.leaseOwner(), "Confirm异常: " + failure.getMessage());
             } else if (confirm.isAck()) {
                 outboxStatusService.markPublished(claim.eventId(), claim.leaseOwner());
             } else {
+                if (metrics != null) metrics.outboxPublishFailed();
                 outboxStatusService.markFailed(
                         claim.eventId(), claim.leaseOwner(), "Confirm NACK: " + confirm.getReason());
             }
@@ -72,6 +79,7 @@ public class RabbitOutboxPublishGateway implements OutboxPublishGateway {
             return;
         }
         // mandatory return 与 Confirm ACK 可能相邻到达，owner + PUBLISHING 条件确保只有首个状态迁移生效。
+        if (metrics != null) metrics.outboxReturned();
         outboxStatusService.markFailed(
                 eventId,
                 leaseOwner,

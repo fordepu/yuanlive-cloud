@@ -1,5 +1,12 @@
 # 项目开发规范
 
+## 关联前端项目
+
+本项目涉及两个独立的前端项目，开发或联调时请根据职责进入对应目录：
+
+- 管理端前端：`/home/frodepu/IdeaProjects/yuanlive-admin`
+- 客户端前端：`/home/frodepu/IdeaProjects/yuanlive-tauri`
+
 ## 中文注释规范
 
 - 新增或修改代码时，涉及复杂业务规则、并发控制、事务边界、消息可靠性、性能保护或非直观实现的，应补充简体中文注释。

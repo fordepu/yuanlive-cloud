@@ -1,13 +1,16 @@
 package blog.yuanyuan.yuanlive.live.service.impl;
 
 import blog.yuanyuan.yuanlive.live.message.request.GroupChatRequest;
+import blog.yuanyuan.yuanlive.live.message.request.LikeRequest;
 import blog.yuanyuan.yuanlive.live.message.response.AckMessage;
 import blog.yuanyuan.yuanlive.live.properties.LiveRoomProperties;
+import blog.yuanyuan.yuanlive.live.properties.LiveWeightsProperties;
 import blog.yuanyuan.yuanlive.live.server.SessionManager;
 import io.netty.channel.Channel;
 import io.netty.channel.ChannelHandlerContext;
 import io.netty.handler.codec.http.websocketx.TextWebSocketFrame;
 import io.netty.util.Attribute;
+import org.springframework.amqp.rabbit.core.RabbitTemplate;
 import org.junit.jupiter.api.Test;
 import org.mockito.ArgumentCaptor;
 import org.springframework.data.redis.core.StringRedisTemplate;
@@ -17,6 +20,9 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
+import static org.mockito.ArgumentMatchers.eq;
+import static org.mockito.ArgumentMatchers.any;
+import java.util.Map;
 
 class LiveMessageServiceImplTest {
 
@@ -77,5 +83,51 @@ class LiveMessageServiceImplTest {
         verify(channel).writeAndFlush(frameCaptor.capture());
         String response = frameCaptor.getValue().text();
         assertTrue(response.contains("请使用送礼订单接口"));
+    }
+
+    @Test
+    void broadcastsLikeEventToRoomWithEventData() {
+        LiveMessageServiceImpl service = new LiveMessageServiceImpl();
+        LiveRoomProperties properties = new LiveRoomProperties();
+        properties.setSessionPrefix("test:live:session:");
+        StringRedisTemplate redis = mock(StringRedisTemplate.class);
+        RabbitTemplate rabbit = mock(RabbitTemplate.class);
+        LiveWeightsProperties weights = new LiveWeightsProperties();
+        ReflectionTestUtils.setField(service, "liveRoomProperties", properties);
+        ReflectionTestUtils.setField(service, "stringRedisTemplate", redis);
+        ReflectionTestUtils.setField(service, "rabbitTemplate", rabbit);
+        ReflectionTestUtils.setField(service, "liveWeightsProperties", weights);
+        ReflectionTestUtils.setField(service, "exchangeName", "live.mq.chat.exchange");
+
+        ChannelHandlerContext context = mock(ChannelHandlerContext.class);
+        Channel channel = mock(Channel.class);
+        @SuppressWarnings("unchecked")
+        Attribute<String> roomAttribute = mock(Attribute.class);
+        @SuppressWarnings("unchecked")
+        Attribute<String> usernameAttribute = mock(Attribute.class);
+        @SuppressWarnings("unchecked")
+        Attribute<Long> userIdAttribute = mock(Attribute.class);
+        when(context.channel()).thenReturn(channel);
+        when(channel.attr(SessionManager.KEY_ROOM_ID)).thenReturn(roomAttribute);
+        when(channel.attr(SessionManager.KEY_USER_NAME)).thenReturn(usernameAttribute);
+        when(channel.attr(SessionManager.KEY_USER_ID)).thenReturn(userIdAttribute);
+        when(roomAttribute.get()).thenReturn("room-1");
+        when(usernameAttribute.get()).thenReturn("alice");
+        when(userIdAttribute.get()).thenReturn(42L);
+        when(redis.hasKey("test:live:session:room-1")).thenReturn(true);
+
+        LikeRequest request = new LikeRequest();
+        request.setMsgId("like-1");
+        LikeRequest.LikeData data = new LikeRequest.LikeData();
+        data.setCount(3);
+        request.setData(data);
+
+        service.handleLike(context, request);
+
+        verify(rabbit).convertAndSend(eq("live.stats.exchange"), eq("like"), any(Map.class));
+        verify(rabbit).convertAndSend(eq("live.mq.chat.exchange"), eq(""),
+                (Object) org.mockito.ArgumentMatchers.argThat(payload -> payload instanceof String
+                        && ((String) payload).contains("\"type\":\"like\"")
+                        && ((String) payload).contains("\"user\":\"alice\"")));
     }
 }

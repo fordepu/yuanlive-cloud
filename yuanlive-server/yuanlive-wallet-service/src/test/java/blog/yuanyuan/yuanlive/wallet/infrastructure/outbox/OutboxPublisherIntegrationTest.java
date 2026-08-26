@@ -145,7 +145,7 @@ class OutboxPublisherIntegrationTest {
     void mandatoryReturnKeepsEventIdAndMovesEventToRetryWait() {
         String eventId = "event-return-001";
         LocalDateTime beforePublish = LocalDateTime.now();
-        insertEvent(9002L, eventId, "wallet.recharged", "{\"eventId\":\"event-return-001\"}",
+        insertEvent(9002L, eventId, "unroutable.event", "{\"eventId\":\"event-return-001\"}",
                 "NEW", 0, null, null, null);
 
         outboxPublisher.publishAvailable();
@@ -267,7 +267,7 @@ class OutboxPublisherIntegrationTest {
 
         @Bean
         Binding outboxPublisherAckBinding(
-                Queue outboxPublisherAckQueue,
+                @Qualifier("outboxPublisherAckQueue") Queue outboxPublisherAckQueue,
                 @Qualifier("walletDomainExchange") org.springframework.amqp.core.TopicExchange exchange) {
             return BindingBuilder.bind(outboxPublisherAckQueue).to(exchange).with("gift.delivered");
         }

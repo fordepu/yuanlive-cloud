@@ -9,4 +9,8 @@ public interface LiveInboxEventMapper extends BaseMapper<LiveInboxEvent> {
 
     @Select("SELECT * FROM live_inbox_event WHERE event_id = #{eventId} LIMIT 1")
     LiveInboxEvent selectByEventId(@Param("eventId") String eventId);
+
+    @Select("SELECT COUNT(*) FROM live_inbox_event "
+            + "WHERE status = 'PROCESSING' AND create_time < TIMESTAMPADD(SECOND, -#{seconds}, NOW(3))")
+    long countStaleProcessing(@Param("seconds") long seconds);
 }

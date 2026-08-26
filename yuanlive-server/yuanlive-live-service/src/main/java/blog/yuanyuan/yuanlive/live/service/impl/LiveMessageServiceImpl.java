@@ -65,6 +65,8 @@ public class LiveMessageServiceImpl implements LiveMessageService {
     @Value("${live.mq.ai-detect.routing-key}")
     private String aiDetectRoutingKey;
 
+    private static final String LIKE_STATS_EXCHANGE = "live.stats.exchange";
+
     @Override
     public void handlePing(ChannelHandlerContext ctx, PingMessage ping) {
         PongMessage pong = PongMessage.builder()
@@ -332,9 +334,12 @@ public class LiveMessageServiceImpl implements LiveMessageService {
         if (!checkRoom(roomId)) {
             return;
         }
-        // 更新直播间热度
-        double increment = liveWeightsProperties.getLike() * like.getData().getCount();
-        popularityUtil.updatePopularity(roomId, increment);
+        // 点赞属于可丢弃统计消息，独立于资金事实队列；队列高峰时允许 TTL/长度淘汰。
+        Map<String, Object> likeEvent = Map.of(
+                "roomId", roomId,
+                "count", like.getData().getCount(),
+                "weight", liveWeightsProperties.getLike());
+        rabbitTemplate.convertAndSend(LIKE_STATS_EXCHANGE, "like", likeEvent);
         // 构造点赞通知
         EventMessage.EventData eventData = new EventMessage.EventData();
         eventData.setType("like");
@@ -344,11 +349,13 @@ public class LiveMessageServiceImpl implements LiveMessageService {
         eventData.setIsVip(false);
         eventData.setLevel(0);
         EventMessage eventMessage = EventMessage.builder()
+                .data(eventData)
                 .timestamp(System.currentTimeMillis() / 1000)
                 .roomId(roomId)
                 .msgId(like.getMsgId())
                 .build();
-        sendMsg(ctx, eventMessage);
+        // 点赞展示属于房间级实时事件，和点赞热度统计使用不同交换机，避免统计丢弃影响展示。
+        broadcastMessage(eventMessage);
     }
 
     @Override

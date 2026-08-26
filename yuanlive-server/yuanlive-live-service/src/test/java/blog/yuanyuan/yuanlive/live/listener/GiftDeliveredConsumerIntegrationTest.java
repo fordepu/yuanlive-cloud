@@ -68,7 +68,8 @@ import static org.mockito.Mockito.verify;
         properties = {
                 "spring.main.banner-mode=off",
                 "spring.flyway.enabled=true",
-                "spring.rabbitmq.listener.simple.auto-startup=true"
+                "spring.rabbitmq.listener.simple.auto-startup=true",
+                "live.gift-display.consumer-enabled=false"
         })
 @Testcontainers
 class GiftDeliveredConsumerIntegrationTest {
@@ -211,7 +212,8 @@ class GiftDeliveredConsumerIntegrationTest {
         assertThat(deadLetter).isNotNull();
         assertThat(new String(deadLetter.getBody(), StandardCharsets.UTF_8)).contains("gift-event-return");
         assertThat(inboxCount("gift-event-return")).isZero();
-        await().atMost(Duration.ofSeconds(5)).untilAsserted(() ->
+        // 展示发布 Confirm 超时最多 5 秒，叠加 1/2/4 秒有限重试后再等待源队列完成 reject。
+        await().atMost(Duration.ofSeconds(15)).untilAsserted(() ->
                 assertThat(queueState(SOURCE_QUEUE)).isEqualTo(QueueState.EMPTY));
     }
 

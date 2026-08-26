@@ -11,6 +11,13 @@ import java.util.List;
 
 public interface OutboxEventMapper extends BaseMapper<OutboxEvent> {
 
+    @Select("SELECT COUNT(*) FROM outbox_event WHERE status = #{status}")
+    long countByStatus(@Param("status") String status);
+
+    @Select("SELECT COALESCE(TIMESTAMPDIFF(SECOND, MIN(create_time), NOW()), 0) FROM outbox_event "
+            + "WHERE status IN ('NEW','RETRY_WAIT','PUBLISHING')")
+    long oldestPendingAgeSeconds();
+
     @Select("SELECT * FROM outbox_event WHERE business_id = #{businessId} LIMIT 1")
     OutboxEvent selectByBusinessId(@Param("businessId") String businessId);
 
