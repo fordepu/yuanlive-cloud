@@ -7,6 +7,7 @@ import blog.yuanyuan.yuanlive.entity.wallet.entity.OutboxEvent;
 import blog.yuanyuan.yuanlive.entity.wallet.entity.WalletAccount;
 import blog.yuanyuan.yuanlive.entity.wallet.entity.WalletLedger;
 import blog.yuanyuan.yuanlive.entity.wallet.entity.RechargeOrder;
+import blog.yuanyuan.yuanlive.entity.wallet.entity.GiftCatalog;
 import blog.yuanyuan.yuanlive.feign.wallet.dto.WalletBalanceQueryResult;
 import blog.yuanyuan.yuanlive.feign.wallet.dto.WalletOrderQueryResult;
 import blog.yuanyuan.yuanlive.feign.live.LiveFeignClient;
@@ -18,6 +19,8 @@ import blog.yuanyuan.yuanlive.wallet.mapper.OutboxEventMapper;
 import blog.yuanyuan.yuanlive.wallet.mapper.WalletAccountMapper;
 import blog.yuanyuan.yuanlive.wallet.mapper.WalletLedgerMapper;
 import blog.yuanyuan.yuanlive.wallet.mapper.RechargeOrderMapper;
+import blog.yuanyuan.yuanlive.wallet.mapper.GiftCatalogMapper;
+import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
 
@@ -33,12 +36,13 @@ public class WalletQueryServiceImpl implements WalletQueryService {
     private final WalletAccountMapper walletAccountMapper;
     private final RechargeOrderMapper rechargeOrderMapper;
     private final LiveFeignClient liveFeignClient;
+    private final GiftCatalogMapper giftCatalogMapper;
 
     @Autowired
     public WalletQueryServiceImpl(GiftOrderMapper giftOrderMapper, WalletLedgerMapper walletLedgerMapper,
                                   AnchorIncomeMapper anchorIncomeMapper, OutboxEventMapper outboxEventMapper,
                                   WalletAccountMapper walletAccountMapper, RechargeOrderMapper rechargeOrderMapper,
-                                  LiveFeignClient liveFeignClient) {
+                                  LiveFeignClient liveFeignClient, GiftCatalogMapper giftCatalogMapper) {
         this.giftOrderMapper = giftOrderMapper;
         this.walletLedgerMapper = walletLedgerMapper;
         this.anchorIncomeMapper = anchorIncomeMapper;
@@ -46,11 +50,12 @@ public class WalletQueryServiceImpl implements WalletQueryService {
         this.walletAccountMapper = walletAccountMapper;
         this.rechargeOrderMapper = rechargeOrderMapper;
         this.liveFeignClient = liveFeignClient;
+        this.giftCatalogMapper = giftCatalogMapper;
     }
 
     public WalletQueryServiceImpl(GiftOrderMapper giftOrderMapper, WalletLedgerMapper walletLedgerMapper,
                                   AnchorIncomeMapper anchorIncomeMapper, OutboxEventMapper outboxEventMapper) {
-        this(giftOrderMapper, walletLedgerMapper, anchorIncomeMapper, outboxEventMapper, null, null, null);
+        this(giftOrderMapper, walletLedgerMapper, anchorIncomeMapper, outboxEventMapper, null, null, null, null);
     }
 
     @Override
@@ -59,6 +64,40 @@ public class WalletQueryServiceImpl implements WalletQueryService {
         if (order == null) throw new ApiException("礼物订单不存在");
         if (requesterId == null || !requesterId.equals(order.getSenderId())) throw new WalletQueryForbiddenException();
         return GiftOrderQueryResult.from(order);
+    }
+
+    @Override
+    public AdminGiftOrderQueryResult getGiftOrderForAdmin(String orderNo) {
+        GiftOrder order = giftOrderMapper.selectByOrderNo(orderNo);
+        if (order == null) throw new ApiException("礼物订单不存在");
+        return AdminGiftOrderQueryResult.from(order);
+    }
+
+    @Override
+    public List<GiftCatalogQueryResult> listGiftCatalog() {
+        if (giftCatalogMapper == null) throw new IllegalStateException("礼物目录查询未配置");
+        LambdaQueryWrapper<GiftCatalog> query = new LambdaQueryWrapper<GiftCatalog>()
+                .eq(GiftCatalog::getStatus, "ON_SHELF")
+                .orderByAsc(GiftCatalog::getSortOrder)
+                .orderByAsc(GiftCatalog::getId);
+        return giftCatalogMapper.selectList(query).stream().map(GiftCatalogQueryResult::from).toList();
+    }
+
+    @Override
+    public CursorPage<AdminGiftOrderQueryResult> listGiftOrdersForAdmin(
+            String orderNo, Long senderId, Long anchorId, String status, Long beforeId, int limit) {
+        int pageSize = normalizeLimit(limit);
+        LambdaQueryWrapper<GiftOrder> query = new LambdaQueryWrapper<GiftOrder>()
+                .eq(orderNo != null && !orderNo.isBlank(), GiftOrder::getOrderNo, orderNo)
+                .eq(senderId != null, GiftOrder::getSenderId, senderId)
+                .eq(anchorId != null, GiftOrder::getAnchorId, anchorId)
+                .eq(status != null && !status.isBlank(), GiftOrder::getStatus, status)
+                .lt(beforeId != null, GiftOrder::getId, beforeId)
+                .orderByDesc(GiftOrder::getId)
+                .last("LIMIT " + pageSize);
+        List<GiftOrder> rows = giftOrderMapper.selectList(query);
+        List<AdminGiftOrderQueryResult> items = rows.stream().map(AdminGiftOrderQueryResult::from).toList();
+        return new CursorPage<>(items, rows.size() == pageSize ? rows.get(rows.size() - 1).getId() : null);
     }
 
     @Override

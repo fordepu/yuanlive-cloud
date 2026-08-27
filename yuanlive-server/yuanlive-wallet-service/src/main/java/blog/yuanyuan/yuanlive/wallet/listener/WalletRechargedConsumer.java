@@ -8,6 +8,7 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.amqp.rabbit.annotation.Exchange;
+import org.springframework.amqp.core.Message;
 import org.springframework.amqp.core.ExchangeTypes;
 import org.springframework.amqp.rabbit.annotation.Queue;
 import org.springframework.amqp.rabbit.annotation.QueueBinding;
@@ -16,6 +17,8 @@ import org.springframework.dao.DuplicateKeyException;
 import org.springframework.stereotype.Component;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.beans.factory.annotation.Autowired;
+
+import java.nio.charset.StandardCharsets;
 
 /**
  * 充值成功通知只记录一次消费事实，不回写钱包资金表，避免通知消费失败影响已经提交的充值。
@@ -44,8 +47,9 @@ public class WalletRechargedConsumer {
             }),
             exchange = @Exchange(value = EXCHANGE, type = ExchangeTypes.TOPIC, durable = "true"),
             key = ROUTING_KEY), containerFactory = "walletNotificationRabbitListenerContainerFactory")
-    public void onMessage(String payload) throws Exception {
-        process(payload);
+    public void onMessage(Message message) throws Exception {
+        // 领域事件的 body 固定为 JSON 对象；接收原始消息可绕过转换器将对象错误反序列化为 String 的失败。
+        process(new String(message.getBody(), StandardCharsets.UTF_8));
     }
 
     @Transactional(rollbackFor = Exception.class)

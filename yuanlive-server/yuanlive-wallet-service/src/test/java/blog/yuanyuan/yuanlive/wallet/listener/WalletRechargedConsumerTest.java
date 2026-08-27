@@ -4,7 +4,9 @@ import blog.yuanyuan.yuanlive.entity.wallet.entity.InboxEvent;
 import blog.yuanyuan.yuanlive.wallet.mapper.InboxEventMapper;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import org.junit.jupiter.api.Test;
+import org.springframework.amqp.core.Message;
 
+import java.lang.reflect.Method;
 import java.util.Map;
 
 import static org.assertj.core.api.Assertions.assertThat;
@@ -14,6 +16,13 @@ import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
 class WalletRechargedConsumerTest {
+
+    @Test
+    void listenerAcceptsRawAmqpMessageForJsonObjectPayload() throws Exception {
+        Method listener = WalletRechargedConsumer.class.getMethod("onMessage", Message.class);
+
+        assertThat(listener.getParameterTypes()).containsExactly(Message.class);
+    }
 
     @Test
     void recordsEachRechargeEventOnceByEventId() throws Exception {

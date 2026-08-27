@@ -738,4 +738,5 @@ docker compose --profile app --profile extra config --services
   - 账号: jjw  
   - 密码: yuanlive+123
 - 普通用户
-  - 请自行注册
+  - 账户: user
+  - 密码: yuanlive+123

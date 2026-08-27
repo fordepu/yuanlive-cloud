@@ -4,10 +4,6 @@ import blog.yuanyuan.yuanlive.live.util.PopularityUtil;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import lombok.RequiredArgsConstructor;
-import org.springframework.amqp.rabbit.annotation.Exchange;
-import org.springframework.amqp.core.ExchangeTypes;
-import org.springframework.amqp.rabbit.annotation.Queue;
-import org.springframework.amqp.rabbit.annotation.QueueBinding;
 import org.springframework.amqp.rabbit.annotation.RabbitListener;
 import org.springframework.stereotype.Component;
 
@@ -23,14 +19,7 @@ public class LikeStatsConsumer {
     private final ObjectMapper objectMapper;
     private final PopularityUtil popularityUtil;
 
-    @RabbitListener(bindings = @QueueBinding(
-            value = @Queue(value = QUEUE, durable = "true", arguments = {
-                    @org.springframework.amqp.rabbit.annotation.Argument(name = "x-message-ttl", value = "10000"),
-                    @org.springframework.amqp.rabbit.annotation.Argument(name = "x-max-length", value = "10000"),
-                    @org.springframework.amqp.rabbit.annotation.Argument(name = "x-overflow", value = "drop-head")
-            }),
-            exchange = @Exchange(value = EXCHANGE, type = ExchangeTypes.TOPIC, durable = "true"),
-            key = ROUTING_KEY))
+    @RabbitListener(queues = QUEUE)
     public void onMessage(String payload) throws Exception {
         JsonNode event = objectMapper.readTree(payload);
         String roomId = event.path("roomId").asText();

@@ -99,6 +99,7 @@ class LiveRoomGiftMigrationIntegrationTest {
                     title VARCHAR(128) NOT NULL,
                     cover_img VARCHAR(255) NULL,
                     room_status TINYINT(1) NOT NULL DEFAULT 0,
+                    accepting_gifts TINYINT(1) NOT NULL DEFAULT 1,
                     view_count INT NULL,
                     category_id INT NULL,
                     last_start_time DATETIME NULL,

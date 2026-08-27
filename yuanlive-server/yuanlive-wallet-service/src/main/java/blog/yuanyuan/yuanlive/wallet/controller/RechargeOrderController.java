@@ -31,7 +31,7 @@ public class RechargeOrderController {
     }
 
     @PostMapping("/{orderNo}/simulate-paid")
-    public Result<RechargeOrderResult> simulatePaid(@PathVariable String orderNo) {
+    public Result<RechargeOrderResult> simulatePaid(@PathVariable("orderNo") String orderNo) {
         if (!simulationEnabled) {
             // 模拟回调只允许开发或测试环境开启，生产环境必须由真实支付渠道回调驱动。
             throw new ApiException("模拟充值未启用");

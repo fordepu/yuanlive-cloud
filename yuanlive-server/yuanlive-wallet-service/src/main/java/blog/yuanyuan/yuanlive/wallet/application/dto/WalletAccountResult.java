@@ -1,4 +1,8 @@
 package blog.yuanyuan.yuanlive.wallet.application.dto;
 
-public record WalletAccountResult(Long userId, Long availableCoin, String status) {
+import com.fasterxml.jackson.databind.annotation.JsonSerialize;
+import com.fasterxml.jackson.databind.ser.std.ToStringSerializer;
+
+public record WalletAccountResult(@JsonSerialize(using = ToStringSerializer.class) Long userId,
+                                  Long availableCoin, String status) {
 }
