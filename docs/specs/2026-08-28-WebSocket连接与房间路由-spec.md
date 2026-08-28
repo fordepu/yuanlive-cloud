@@ -48,7 +48,11 @@ Sec-WebSocket-Protocol: <accessToken>
 - 为灰度兼容保留 `JOIN_ROOM`：仅当 Channel 尚未绑定房间时可用；已绑定时请求中的 `roomId` 必须一致，否则返回 `400` 并关闭连接。
 - `lastSeq` 缺省视为 `0`，服务端在完成加入后发送缓存中 `seq > lastSeq` 的有限消息。
 
-### 2.3 公共事件结构
+### 2.3 灰度兼容连接
+
+未携带 `scope` 的旧客户端在服务端标记为 `LEGACY`。其握手后仍先注册旧 `USER_MAP` 行为，并允许通过首帧 `JOIN_ROOM` 加入或切换房间；新客户端不得发送 `LEGACY`。该范围只用于过渡，且不参与新 APP/ROOM 定向路由能力。
+
+### 2.4 公共事件结构
 
 ```json
 {
@@ -82,6 +86,7 @@ AttributeKey<String> KEY_CONNECTION_ID;      // UUID，防旧连接误删路由
 - ROOM 连接建立：先加入本机 `ROOM_MAP[roomId]`，再写 Redis 实例成员集合。
 - APP 断开：只有 Redis 当前值的 `connectionId` 与断开 Channel 相同，才删除 `ws:user:{userId}:app`，防止旧连接删除新主连接。
 - ROOM 断开：从本机 group 移除；若该实例此房间已无 Channel，删除该实例的房间成员记录。
+- LEGACY 断开：沿用旧连接清理路径；不得影响 APP 连接的 connectionId 防旧连接保护。
 
 ## 4. Redis 路由目录
 

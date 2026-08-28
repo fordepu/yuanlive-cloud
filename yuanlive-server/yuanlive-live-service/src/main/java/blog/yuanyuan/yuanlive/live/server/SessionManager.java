@@ -2,6 +2,7 @@ package blog.yuanyuan.yuanlive.live.server;
 
 import blog.yuanyuan.yuanlive.live.properties.LiveRoomProperties;
 import blog.yuanyuan.yuanlive.live.properties.LiveWeightsProperties;
+import blog.yuanyuan.yuanlive.live.realtime.ConnectionScope;
 import blog.yuanyuan.yuanlive.live.util.PopularityUtil;
 import cn.hutool.core.util.StrUtil;
 import io.netty.channel.Channel;
@@ -32,6 +33,8 @@ public class SessionManager {
     public static final AttributeKey<Long> KEY_USER_ID = AttributeKey.valueOf("userId");
     public static final AttributeKey<String> KEY_USER_NAME = AttributeKey.valueOf("name");
     public static final AttributeKey<String> KEY_ROOM_ID = AttributeKey.valueOf("roomId");
+    public static final AttributeKey<String> KEY_REQUESTED_ROOM_ID = AttributeKey.valueOf("requestedRoomId");
+    public static final AttributeKey<ConnectionScope> KEY_CONNECTION_SCOPE = AttributeKey.valueOf("connectionScope");
     public static final AttributeKey<String> KEY_DEVICE_ID = AttributeKey.valueOf("deviceId");
     public static final AttributeKey<String> KEY_DEVICE_TYPE = AttributeKey.valueOf("deviceType");
     public static final AttributeKey<String> KEY_TOKEN = AttributeKey.valueOf("token");
@@ -53,6 +56,20 @@ public class SessionManager {
         USER_MAP.put(userId, channel);
         channel.attr(KEY_USER_ID).set(userId);
         log.info("用户[{}] 建立连接，当前在线人数: {}", userId, USER_MAP.size());
+    }
+
+    /** 注册应用级主连接；只有该连接可作为用户定向通知的本机目标。 */
+    public void registerAppChannel(Long userId, Channel channel) {
+        channel.attr(KEY_CONNECTION_SCOPE).set(ConnectionScope.APP);
+        register(userId, channel);
+    }
+
+    /**
+     * 注册房间连接时绝不写 USER_MAP，避免观看页覆盖用户主页面连接。
+     */
+    public void registerRoomChannel(String roomId, String device, Channel channel) {
+        channel.attr(KEY_CONNECTION_SCOPE).set(ConnectionScope.ROOM);
+        joinRoom(roomId, device, channel);
     }
 
     /**
@@ -87,9 +104,13 @@ public class SessionManager {
             if (roomId != null) {
                 MDC.put("roomId", roomId);
             }
-            if (userId != null) {
-                USER_MAP.remove(userId);
+            ConnectionScope scope = channel.attr(KEY_CONNECTION_SCOPE).get();
+            if (userId != null && (scope == ConnectionScope.APP || scope == ConnectionScope.LEGACY || scope == null)) {
+                // 仅当断开的是当前映射的 Channel 才删除，旧连接不能清掉新主连接。
+                USER_MAP.remove(userId, channel);
                 log.info("用户[{}] 断开连接", userId);
+            }
+            if (userId != null) {
                 // 执行离场 Lua 脚本
                 // 如果 roomId 不为空
                 if (StrUtil.isNotBlank(roomId)) {

@@ -3,6 +3,7 @@ package blog.yuanyuan.yuanlive.live.server;
 import blog.yuanyuan.yuanlive.common.result.Result;
 import blog.yuanyuan.yuanlive.entity.user.entity.SysUser;
 import blog.yuanyuan.yuanlive.feign.user.UserFeignClient;
+import blog.yuanyuan.yuanlive.live.realtime.ConnectionScope;
 import cn.hutool.core.util.IdUtil;
 import cn.hutool.core.util.StrUtil;
 import cn.hutool.http.HttpUtil;
@@ -56,9 +57,27 @@ public class AuthHandshakeHandler extends ChannelDuplexHandler {
                 // uri 格式: /ws?deviceID=123456
                 Map<String, String> params = HttpUtil.decodeParamMap(uri, StandardCharsets.UTF_8);
                 String deviceId = params.get("deviceID");
+                String scopeValue = params.get("scope");
+                String requestedRoomId = params.get("roomId");
 
                 if (StrUtil.isBlank(deviceId)) {
                     log.warn("握手失败: deviceID 为空");
+                    ctx.close();
+                    return;
+                }
+                ConnectionScope scope = resolveScope(scopeValue);
+                if (scope == null) {
+                    log.warn("握手失败: scope非法");
+                    ctx.close();
+                    return;
+                }
+                if (scope == ConnectionScope.APP && StrUtil.isNotBlank(requestedRoomId)) {
+                    log.warn("握手失败: APP连接不能携带roomId");
+                    ctx.close();
+                    return;
+                }
+                if (scope == ConnectionScope.ROOM && StrUtil.isBlank(requestedRoomId)) {
+                    log.warn("握手失败: ROOM连接缺少roomId");
                     ctx.close();
                     return;
                 }
@@ -81,6 +100,10 @@ public class AuthHandshakeHandler extends ChannelDuplexHandler {
                 ctx.channel().attr(SessionManager.KEY_DEVICE_ID).set(deviceId);
                 ctx.channel().attr(SessionManager.KEY_USER_ID).set(user.getUid());
                 ctx.channel().attr(SessionManager.KEY_USER_NAME).set(user.getUsername());
+                ctx.channel().attr(SessionManager.KEY_CONNECTION_SCOPE).set(scope);
+                if (scope == ConnectionScope.ROOM) {
+                    ctx.channel().attr(SessionManager.KEY_REQUESTED_ROOM_ID).set(requestedRoomId);
+                }
                 // --- D. 关键处理：Token 协议头 ---
                 request.headers().remove("Sec-WebSocket-Protocol");
 
@@ -93,6 +116,15 @@ public class AuthHandshakeHandler extends ChannelDuplexHandler {
 
         // 继续向下传递，交给 WebSocketServerProtocolHandler 完成标准握手
         super.channelRead(ctx, msg);
+    }
+
+    private ConnectionScope resolveScope(String scopeValue) {
+        if (StrUtil.isBlank(scopeValue)) return ConnectionScope.LEGACY;
+        try {
+            return ConnectionScope.valueOf(scopeValue.trim().toUpperCase());
+        } catch (IllegalArgumentException exception) {
+            return null;
+        }
     }
 
     @Override

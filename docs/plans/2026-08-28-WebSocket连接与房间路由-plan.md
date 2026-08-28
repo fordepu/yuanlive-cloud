@@ -15,6 +15,7 @@
 - 仅在两个项目的 `dev` 分支实施，且不得覆盖用户已有未提交修改。
 - `Channel` 仅绑定一个 `roomId`；多房间观看通过多条 ROOM 连接实现。
 - `USER_MAP` 只收录 `scope=APP` 的主页面连接，ROOM 连接不得覆盖它。
+- 灰度期间允许服务端内部 `LEGACY` 范围承接未携带 scope 的旧客户端；新客户端不发送该范围，完成 APP/ROOM 全量发布后删除兼容分支。
 - 所有跨实例实时事件必须带 `eventId`；房间事件还必须带 `seq`。
 - 普通 CHAT 不得使用所有 `live-service` 实例的 fanout 广播。
 - Redis 路由键必须有 TTL，并由连接/实例心跳续期。
@@ -59,7 +60,7 @@
 - `registerRoomChannel(String roomId, Channel channel)`。
 - `remove(Channel channel)` 按 scope 分支清理。
 
-- [ ] 编写失败测试：ROOM 握手自动加入房间、ROOM 连接不写 USER_MAP、APP 连接不能 JOIN_ROOM、已绑定不同 roomId 的 JOIN_ROOM 被拒绝。
+- [ ] 编写失败测试：ROOM 握手自动加入房间、ROOM 连接不写 USER_MAP、APP 连接不能 JOIN_ROOM、已绑定不同 roomId 的 JOIN_ROOM 被拒绝，以及无 scope 的旧连接保留 JOIN_ROOM 兼容。
 - [ ] 运行指定 JUnit 测试，确认失败原因与新规则一致。
 - [ ] 在握手解析 `scope`、`roomId`、`lastSeq`；APP 与 ROOM 分别注册，ROOM 校验房间直播状态。
 - [ ] 保留旧 JOIN_ROOM 灰度兼容：只允许未绑定房间的 Channel 首次绑定，禁止切换房间。

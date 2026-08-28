@@ -8,6 +8,7 @@ import blog.yuanyuan.yuanlive.live.message.request.LikeRequest;
 import blog.yuanyuan.yuanlive.live.message.request.PingMessage;
 import blog.yuanyuan.yuanlive.live.message.response.AckMessage;
 import blog.yuanyuan.yuanlive.live.service.LiveMessageService;
+import blog.yuanyuan.yuanlive.live.realtime.ConnectionScope;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.core.JsonProcessingException;
 import io.netty.channel.ChannelHandler;
@@ -89,15 +90,23 @@ public class NettyServerHandler extends SimpleChannelInboundHandler<TextWebSocke
         String traceId = ctx.channel().attr(SessionManager.KEY_TRACE_ID).get();
         MDC.put("traceId", traceId);
         try {
-            if (evt instanceof WebSocketServerProtocolHandler.HandshakeComplete) {
+            if (evt instanceof WebSocketServerProtocolHandler.HandshakeComplete
+                    || evt == WebSocketServerProtocolHandler.ServerHandshakeStateEvent.HANDSHAKE_COMPLETE) {
                 // 此时 AuthHandshakeHandler 已经执行完毕，Attribute 里有值了
                 Long userId = ctx.channel().attr(SessionManager.KEY_USER_ID).get();
                 String deviceId = ctx.channel().attr(SessionManager.KEY_DEVICE_ID).get();
+                ConnectionScope scope = ctx.channel().attr(SessionManager.KEY_CONNECTION_SCOPE).get();
 
                 if (userId != null) {
-                    // ✅ 在这里注册才是真正有效的
-                    sessionManager.register(userId, ctx.channel());
-                    log.info("✅ 用户[{}] 设备[{}] 握手成功，正式上线！", userId, deviceId);
+                    if (scope == ConnectionScope.APP) {
+                        sessionManager.registerAppChannel(userId, ctx.channel());
+                    } else if (scope == ConnectionScope.ROOM) {
+                        joinRequestedRoom(ctx, deviceId);
+                    } else {
+                        // 旧客户端未携带 scope，继续复用其首帧 JOIN_ROOM 协议。
+                        sessionManager.register(userId, ctx.channel());
+                    }
+                    log.info("用户[{}] 设备[{}] scope=[{}] 握手成功", userId, deviceId, scope);
                 }
             } else if (evt instanceof IdleStateEvent event) {
                 if (event.state() == IdleState.READER_IDLE) {
@@ -110,5 +119,20 @@ public class NettyServerHandler extends SimpleChannelInboundHandler<TextWebSocke
         } finally {
             MDC.remove("traceId");
         }
+    }
+
+    private void joinRequestedRoom(ChannelHandlerContext ctx, String deviceId) {
+        String roomId = ctx.channel().attr(SessionManager.KEY_REQUESTED_ROOM_ID).get();
+        if (roomId == null || roomId.isBlank()) {
+            sendProtocolError(ctx, "ROOM连接缺少roomId");
+            ctx.close();
+            return;
+        }
+        JoinRequest.JoinData data = new JoinRequest.JoinData();
+        data.setRoomId(roomId);
+        data.setDevice(deviceId);
+        JoinRequest join = new JoinRequest();
+        join.setData(data);
+        liveMessageService.handleJoinRoom(ctx, join);
     }
 }

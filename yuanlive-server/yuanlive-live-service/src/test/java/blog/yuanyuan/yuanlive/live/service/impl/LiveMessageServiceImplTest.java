@@ -1,11 +1,13 @@
 package blog.yuanyuan.yuanlive.live.service.impl;
 
 import blog.yuanyuan.yuanlive.live.message.request.GroupChatRequest;
+import blog.yuanyuan.yuanlive.live.message.request.JoinRequest;
 import blog.yuanyuan.yuanlive.live.message.request.LikeRequest;
 import blog.yuanyuan.yuanlive.live.message.response.AckMessage;
 import blog.yuanyuan.yuanlive.live.properties.LiveRoomProperties;
 import blog.yuanyuan.yuanlive.live.properties.LiveWeightsProperties;
 import blog.yuanyuan.yuanlive.live.server.SessionManager;
+import blog.yuanyuan.yuanlive.live.realtime.ConnectionScope;
 import io.netty.channel.Channel;
 import io.netty.channel.ChannelHandlerContext;
 import io.netty.handler.codec.http.websocketx.TextWebSocketFrame;
@@ -83,6 +85,30 @@ class LiveMessageServiceImplTest {
         verify(channel).writeAndFlush(frameCaptor.capture());
         String response = frameCaptor.getValue().text();
         assertTrue(response.contains("请使用送礼订单接口"));
+    }
+
+    @Test
+    void rejectsRoomJoinFromApplicationConnection() {
+        LiveMessageServiceImpl service = new LiveMessageServiceImpl();
+        ChannelHandlerContext context = mock(ChannelHandlerContext.class);
+        Channel channel = mock(Channel.class);
+        @SuppressWarnings("unchecked")
+        Attribute<ConnectionScope> scopeAttribute = mock(Attribute.class);
+        when(context.channel()).thenReturn(channel);
+        when(channel.attr(SessionManager.KEY_CONNECTION_SCOPE)).thenReturn(scopeAttribute);
+        when(scopeAttribute.get()).thenReturn(ConnectionScope.APP);
+
+        JoinRequest request = new JoinRequest();
+        request.setMsgId("join-1");
+        JoinRequest.JoinData data = new JoinRequest.JoinData();
+        data.setRoomId("room-1");
+        request.setData(data);
+
+        service.handleJoinRoom(context, request);
+
+        ArgumentCaptor<TextWebSocketFrame> frameCaptor = ArgumentCaptor.forClass(TextWebSocketFrame.class);
+        verify(channel).writeAndFlush(frameCaptor.capture());
+        assertTrue(frameCaptor.getValue().text().contains("APP连接不能加入直播间"));
     }
 
     @Test

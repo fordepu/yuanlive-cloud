@@ -14,6 +14,7 @@ import blog.yuanyuan.yuanlive.live.properties.AiDetectProperties;
 import blog.yuanyuan.yuanlive.live.properties.LiveRoomProperties;
 import blog.yuanyuan.yuanlive.live.properties.LiveWeightsProperties;
 import blog.yuanyuan.yuanlive.live.server.SessionManager;
+import blog.yuanyuan.yuanlive.live.realtime.ConnectionScope;
 import blog.yuanyuan.yuanlive.live.service.LiveMessageService;
 import blog.yuanyuan.yuanlive.live.service.LiveRoomService;
 import blog.yuanyuan.yuanlive.live.util.PopularityUtil;
@@ -88,6 +89,28 @@ public class LiveMessageServiceImpl implements LiveMessageService {
             return;
         }
         String roomId = join.getData().getRoomId();
+        ConnectionScope scope = ctx.channel().attr(SessionManager.KEY_CONNECTION_SCOPE).get();
+        if (scope == ConnectionScope.APP) {
+            JoinResponse response = JoinResponse.builder()
+                    .msgId(join.getMsgId())
+                    .code(400)
+                    .message("APP连接不能加入直播间")
+                    .success(false)
+                    .build();
+            sendMsg(ctx, response);
+            return;
+        }
+        String requestedRoomId = ctx.channel().attr(SessionManager.KEY_REQUESTED_ROOM_ID).get();
+        if (scope == ConnectionScope.ROOM && !roomId.equals(requestedRoomId)) {
+            JoinResponse response = JoinResponse.builder()
+                    .msgId(join.getMsgId())
+                    .code(400)
+                    .message("JOIN_ROOM房间与握手房间不一致")
+                    .success(false)
+                    .build();
+            sendMsg(ctx, response);
+            return;
+        }
         join.setRoomId(roomId);
         Long userId = ctx.channel().attr(SessionManager.KEY_USER_ID).get();// 判断直播间是否存在
         boolean exists = checkRoom(roomId);
@@ -115,8 +138,18 @@ public class LiveMessageServiceImpl implements LiveMessageService {
                 sendMsg(ctx, response);
                 return;
             }
-            // 如果用户已经加入过其他房间，先执行退出逻辑
+            // ROOM 连接一生只服务一个房间；LEGACY 才保留旧客户端的切房兼容。
             if (currentRoomId != null) {
+                if (scope == ConnectionScope.ROOM) {
+                    JoinResponse response = JoinResponse.builder()
+                            .msgId(join.getMsgId())
+                            .code(400)
+                            .message("ROOM连接不能切换直播间")
+                            .success(false)
+                            .build();
+                    sendMsg(ctx, response);
+                    return;
+                }
                 leaveRoom(ctx);
             }
 
