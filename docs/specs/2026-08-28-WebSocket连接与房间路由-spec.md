@@ -82,7 +82,7 @@ AttributeKey<String> KEY_CONNECTION_ID;      // UUID，防旧连接误删路由
 
 ### 3.1 注册与清理
 
-- APP 连接建立：原子写 `USER_MAP[userId]`，再写 Redis `ws:user:{userId}:app`；Redis 值为 `instanceId:connectionId`。
+- APP 连接建立：原子写 `USER_MAP[userId]`，再写 Redis `ws:user:{userId}:app`；Redis 值为 `instanceId|epoch|connectionId`。实例 ID 含 `host:port`，因此字段分隔符固定为 `|`。
 - ROOM 连接建立：先加入本机 `ROOM_MAP[roomId]`，再写 Redis 实例成员集合。
 - APP 断开：只有 Redis 当前值的 `connectionId` 与断开 Channel 相同，才删除 `ws:user:{userId}:app`，防止旧连接删除新主连接。
 - ROOM 断开：从本机 group 移除；若该实例此房间已无 Channel，删除该实例的房间成员记录。
@@ -93,8 +93,8 @@ AttributeKey<String> KEY_CONNECTION_ID;      // UUID，防旧连接误删路由
 | 键 | 类型 | 值/成员 | TTL | 用途 |
 | --- | --- | --- | --- | --- |
 | `ws:instance:{instanceId}:lease` | String | 启动 epoch | 30 秒 | 实例存活租约 |
-| `ws:user:{userId}:app` | String | `instanceId:connectionId` | 45 秒 | 用户主连接归属 |
-| `ws:room:{roomId}:instances` | ZSet | `instanceId`，score 为过期毫秒 | 60 秒 | 承载该房间连接的实例集合 |
+| `ws:user:{userId}:app` | String | `instanceId|epoch|connectionId` | 45 秒 | 用户主连接归属 |
+| `ws:room:{roomId}:instances` | ZSet | `instanceId|epoch`，score 为过期毫秒 | 60 秒 | 承载该房间连接的实例集合 |
 | `ws:room:{roomId}:seq` | String | 当前序号 | 与直播会话一致 | 房间事件序号 |
 | `ws:room:{roomId}:buffer` | Stream/ZSet | `seq → event JSON` | 10 分钟或 500 条 | 断线补偿缓冲 |
 

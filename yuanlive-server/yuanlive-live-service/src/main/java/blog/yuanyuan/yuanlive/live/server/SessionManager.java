@@ -3,6 +3,7 @@ package blog.yuanyuan.yuanlive.live.server;
 import blog.yuanyuan.yuanlive.live.properties.LiveRoomProperties;
 import blog.yuanyuan.yuanlive.live.properties.LiveWeightsProperties;
 import blog.yuanyuan.yuanlive.live.realtime.ConnectionScope;
+import blog.yuanyuan.yuanlive.live.realtime.routing.ConnectionRouteRegistry;
 import blog.yuanyuan.yuanlive.live.util.PopularityUtil;
 import cn.hutool.core.util.StrUtil;
 import io.netty.channel.Channel;
@@ -20,6 +21,7 @@ import org.springframework.stereotype.Component;
 import java.util.Arrays;
 import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
+import java.util.UUID;
 
 @Component
 @Slf4j
@@ -35,6 +37,7 @@ public class SessionManager {
     public static final AttributeKey<String> KEY_ROOM_ID = AttributeKey.valueOf("roomId");
     public static final AttributeKey<String> KEY_REQUESTED_ROOM_ID = AttributeKey.valueOf("requestedRoomId");
     public static final AttributeKey<ConnectionScope> KEY_CONNECTION_SCOPE = AttributeKey.valueOf("connectionScope");
+    public static final AttributeKey<String> KEY_CONNECTION_ID = AttributeKey.valueOf("connectionId");
     public static final AttributeKey<String> KEY_DEVICE_ID = AttributeKey.valueOf("deviceId");
     public static final AttributeKey<String> KEY_DEVICE_TYPE = AttributeKey.valueOf("deviceType");
     public static final AttributeKey<String> KEY_TOKEN = AttributeKey.valueOf("token");
@@ -48,6 +51,8 @@ public class SessionManager {
     private StringRedisTemplate stringRedisTemplate;
     @Resource
     private PopularityUtil popularityUtil;
+    @Resource
+    private ConnectionRouteRegistry connectionRouteRegistry;
     /**
      * 1. 用户上线 (连接建立时调用)
      * 仅保存连接引用，不加入房间
@@ -61,7 +66,10 @@ public class SessionManager {
     /** 注册应用级主连接；只有该连接可作为用户定向通知的本机目标。 */
     public void registerAppChannel(Long userId, Channel channel) {
         channel.attr(KEY_CONNECTION_SCOPE).set(ConnectionScope.APP);
+        String connectionId = UUID.randomUUID().toString();
+        channel.attr(KEY_CONNECTION_ID).set(connectionId);
         register(userId, channel);
+        if (connectionRouteRegistry != null) connectionRouteRegistry.registerApp(userId, connectionId);
     }
 
     /**
@@ -83,8 +91,20 @@ public class SessionManager {
         ChannelGroup group = ROOM_MAP.computeIfAbsent(roomId, k ->
                 new DefaultChannelGroup(GlobalEventExecutor.INSTANCE)
         );
-        group.add(channel);
+        boolean added = group.add(channel);
+        if (added && connectionRouteRegistry != null) connectionRouteRegistry.registerRoom(roomId);
         log.info("连接[{}] 加入房间[{}]", channel.id(), roomId);
+    }
+
+    /** 在业务离场完成前移除本机房间组，并在最后一个连接离开时撤销实例路由。 */
+    public void removeRoomChannel(String roomId, Channel channel) {
+        ChannelGroup group = ROOM_MAP.get(roomId);
+        if (group == null) return;
+        group.remove(channel);
+        if (group.isEmpty()) {
+            ROOM_MAP.remove(roomId, group);
+            if (connectionRouteRegistry != null) connectionRouteRegistry.unregisterRoom(roomId);
+        }
     }
 
     /**
@@ -108,6 +128,10 @@ public class SessionManager {
             if (userId != null && (scope == ConnectionScope.APP || scope == ConnectionScope.LEGACY || scope == null)) {
                 // 仅当断开的是当前映射的 Channel 才删除，旧连接不能清掉新主连接。
                 USER_MAP.remove(userId, channel);
+                String connectionId = channel.attr(KEY_CONNECTION_ID).get();
+                if (scope == ConnectionScope.APP && connectionId != null && connectionRouteRegistry != null) {
+                    connectionRouteRegistry.unregisterAppIfCurrent(userId, connectionId);
+                }
                 log.info("用户[{}] 断开连接", userId);
             }
             if (userId != null) {

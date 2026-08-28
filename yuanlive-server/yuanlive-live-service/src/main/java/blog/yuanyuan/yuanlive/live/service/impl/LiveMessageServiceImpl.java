@@ -415,7 +415,9 @@ public class LiveMessageServiceImpl implements LiveMessageService {
     private void leaveRoom(ChannelHandlerContext ctx) {
         Long userId = ctx.channel().attr(SessionManager.KEY_USER_ID).get();
         String roomId = ctx.channel().attr(SessionManager.KEY_ROOM_ID).get();
+        if (StrUtil.isBlank(roomId) || userId == null) return;
         log.info("用户[{}] 退出房间[{}]", userId, roomId);
+        sessionManager.removeRoomChannel(roomId, ctx.channel());
         ctx.channel().attr(SessionManager.KEY_ROOM_ID).set(null);
         String currentKey = liveRoomProperties.getCurrentPrefix() + roomId;
         stringRedisTemplate.opsForSet().remove(currentKey, userId.toString());

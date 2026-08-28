@@ -22,6 +22,7 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
+import static org.mockito.Mockito.verifyNoInteractions;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.ArgumentMatchers.any;
 import java.util.Map;
@@ -109,6 +110,32 @@ class LiveMessageServiceImplTest {
         ArgumentCaptor<TextWebSocketFrame> frameCaptor = ArgumentCaptor.forClass(TextWebSocketFrame.class);
         verify(channel).writeAndFlush(frameCaptor.capture());
         assertTrue(frameCaptor.getValue().text().contains("APP连接不能加入直播间"));
+    }
+
+    @Test
+    void disconnectingApplicationConnectionDoesNotRunRoomLeaveLogic() {
+        LiveMessageServiceImpl service = new LiveMessageServiceImpl();
+        SessionManager sessionManager = mock(SessionManager.class);
+        StringRedisTemplate redis = mock(StringRedisTemplate.class);
+        ReflectionTestUtils.setField(service, "sessionManager", sessionManager);
+        ReflectionTestUtils.setField(service, "stringRedisTemplate", redis);
+
+        ChannelHandlerContext context = mock(ChannelHandlerContext.class);
+        Channel channel = mock(Channel.class);
+        @SuppressWarnings("unchecked")
+        Attribute<Long> userAttribute = mock(Attribute.class);
+        @SuppressWarnings("unchecked")
+        Attribute<String> roomAttribute = mock(Attribute.class);
+        when(context.channel()).thenReturn(channel);
+        when(channel.attr(SessionManager.KEY_USER_ID)).thenReturn(userAttribute);
+        when(channel.attr(SessionManager.KEY_ROOM_ID)).thenReturn(roomAttribute);
+        when(userAttribute.get()).thenReturn(1001L);
+        when(roomAttribute.get()).thenReturn(null);
+
+        service.handleDisconnect(context);
+
+        verify(sessionManager).remove(channel);
+        verifyNoInteractions(redis);
     }
 
     @Test
