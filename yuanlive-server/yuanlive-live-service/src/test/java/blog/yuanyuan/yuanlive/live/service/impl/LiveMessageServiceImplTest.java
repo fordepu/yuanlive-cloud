@@ -8,6 +8,7 @@ import blog.yuanyuan.yuanlive.live.properties.LiveRoomProperties;
 import blog.yuanyuan.yuanlive.live.properties.LiveWeightsProperties;
 import blog.yuanyuan.yuanlive.live.server.SessionManager;
 import blog.yuanyuan.yuanlive.live.realtime.ConnectionScope;
+import blog.yuanyuan.yuanlive.live.realtime.replay.RoomRealtimeEventPublisher;
 import io.netty.channel.Channel;
 import io.netty.channel.ChannelHandlerContext;
 import io.netty.handler.codec.http.websocketx.TextWebSocketFrame;
@@ -150,7 +151,8 @@ class LiveMessageServiceImplTest {
         ReflectionTestUtils.setField(service, "stringRedisTemplate", redis);
         ReflectionTestUtils.setField(service, "rabbitTemplate", rabbit);
         ReflectionTestUtils.setField(service, "liveWeightsProperties", weights);
-        ReflectionTestUtils.setField(service, "exchangeName", "live.mq.chat.exchange");
+        RoomRealtimeEventPublisher roomPublisher = mock(RoomRealtimeEventPublisher.class);
+        ReflectionTestUtils.setField(service, "roomRealtimeEventPublisher", roomPublisher);
 
         ChannelHandlerContext context = mock(ChannelHandlerContext.class);
         Channel channel = mock(Channel.class);
@@ -178,9 +180,9 @@ class LiveMessageServiceImplTest {
         service.handleLike(context, request);
 
         verify(rabbit).convertAndSend(eq("live.stats.exchange"), eq("like"), any(Map.class));
-        verify(rabbit).convertAndSend(eq("live.mq.chat.exchange"), eq(""),
-                (Object) org.mockito.ArgumentMatchers.argThat(payload -> payload instanceof String
-                        && ((String) payload).contains("\"type\":\"like\"")
-                        && ((String) payload).contains("\"user\":\"alice\"")));
+        verify(roomPublisher).publish(org.mockito.ArgumentMatchers.argThat(message ->
+                "room-1".equals(message.getRoomId())
+                        && "EVENT".equals(message.getCmd().name())
+                        && message.toString().contains("like")));
     }
 }

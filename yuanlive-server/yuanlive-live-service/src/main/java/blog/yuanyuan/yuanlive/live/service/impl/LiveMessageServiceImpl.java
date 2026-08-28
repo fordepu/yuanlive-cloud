@@ -15,6 +15,7 @@ import blog.yuanyuan.yuanlive.live.properties.LiveRoomProperties;
 import blog.yuanyuan.yuanlive.live.properties.LiveWeightsProperties;
 import blog.yuanyuan.yuanlive.live.server.SessionManager;
 import blog.yuanyuan.yuanlive.live.realtime.ConnectionScope;
+import blog.yuanyuan.yuanlive.live.realtime.replay.RoomRealtimeEventPublisher;
 import blog.yuanyuan.yuanlive.live.service.LiveMessageService;
 import blog.yuanyuan.yuanlive.live.service.LiveRoomService;
 import blog.yuanyuan.yuanlive.live.util.PopularityUtil;
@@ -52,6 +53,8 @@ public class LiveMessageServiceImpl implements LiveMessageService {
     private PopularityUtil popularityUtil;
     @Resource
     private LiveRoomService roomService;
+    @Resource
+    private RoomRealtimeEventPublisher roomRealtimeEventPublisher;
 
     @Resource(name = "joinRoomScript")
     private DefaultRedisScript<Long> joinRoomScript;
@@ -59,8 +62,6 @@ public class LiveMessageServiceImpl implements LiveMessageService {
     @Resource(name = "harvestChatsScript")
     private DefaultRedisScript<List> harvestChatsScript;
 
-    @Value("${live.mq.chat.exchange}")
-    private String exchangeName;
     @Value(("${live.mq.ai-detect.exchange}"))
     private String aiDetectExchangeName;
     @Value("${live.mq.ai-detect.routing-key}")
@@ -404,7 +405,7 @@ public class LiveMessageServiceImpl implements LiveMessageService {
 
     // 广播消息
     private void broadcastMessage(Message message) {
-        rabbitTemplate.convertAndSend(exchangeName, "", JSONUtil.toJsonStr(message));
+        roomRealtimeEventPublisher.publish(message);
     }
 
     // 向请求者发送消息
