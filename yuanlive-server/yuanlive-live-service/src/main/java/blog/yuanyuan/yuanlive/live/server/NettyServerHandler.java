@@ -9,6 +9,9 @@ import blog.yuanyuan.yuanlive.live.message.request.PingMessage;
 import blog.yuanyuan.yuanlive.live.message.response.AckMessage;
 import blog.yuanyuan.yuanlive.live.service.LiveMessageService;
 import blog.yuanyuan.yuanlive.live.realtime.ConnectionScope;
+import blog.yuanyuan.yuanlive.live.realtime.replay.RoomEventBuffer;
+import blog.yuanyuan.yuanlive.live.realtime.replay.RoomReplayResult;
+import blog.yuanyuan.yuanlive.live.realtime.replay.RoomReplayStatus;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.core.JsonProcessingException;
 import io.netty.channel.ChannelHandler;
@@ -33,6 +36,8 @@ public class NettyServerHandler extends SimpleChannelInboundHandler<TextWebSocke
     private SessionManager sessionManager;
     @Resource
     private ObjectMapper objectMapper;
+    @Resource
+    private RoomEventBuffer roomEventBuffer;
 
     @Override
     public void channelActive(ChannelHandlerContext ctx) throws Exception {
@@ -134,5 +139,14 @@ public class NettyServerHandler extends SimpleChannelInboundHandler<TextWebSocke
         JoinRequest join = new JoinRequest();
         join.setData(data);
         liveMessageService.handleJoinRoom(ctx, join);
+        io.netty.util.Attribute<Long> lastSeqAttribute = ctx.channel().attr(SessionManager.KEY_LAST_SEQ);
+        Long lastSeq = lastSeqAttribute == null ? 0L : lastSeqAttribute.get();
+        RoomReplayResult replay = roomEventBuffer.replayAfter(roomId, lastSeq == null ? 0L : lastSeq);
+        if (replay == null) return;
+        if (replay.status() == RoomReplayStatus.RESYNC_REQUIRED) {
+            ctx.channel().writeAndFlush(new TextWebSocketFrame("{\"type\":\"RESYNC_REQUIRED\",\"roomId\":\"" + roomId + "\"}"));
+            return;
+        }
+        replay.events().forEach(event -> ctx.channel().writeAndFlush(new TextWebSocketFrame(objectMapper.valueToTree(event).toString())));
     }
 }

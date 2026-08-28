@@ -36,6 +36,7 @@ public class SessionManager {
     public static final AttributeKey<String> KEY_USER_NAME = AttributeKey.valueOf("name");
     public static final AttributeKey<String> KEY_ROOM_ID = AttributeKey.valueOf("roomId");
     public static final AttributeKey<String> KEY_REQUESTED_ROOM_ID = AttributeKey.valueOf("requestedRoomId");
+    public static final AttributeKey<Long> KEY_LAST_SEQ = AttributeKey.valueOf("lastSeq");
     public static final AttributeKey<ConnectionScope> KEY_CONNECTION_SCOPE = AttributeKey.valueOf("connectionScope");
     public static final AttributeKey<String> KEY_CONNECTION_ID = AttributeKey.valueOf("connectionId");
     public static final AttributeKey<String> KEY_DEVICE_ID = AttributeKey.valueOf("deviceId");

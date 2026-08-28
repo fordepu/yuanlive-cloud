@@ -59,6 +59,7 @@ public class AuthHandshakeHandler extends ChannelDuplexHandler {
                 String deviceId = params.get("deviceID");
                 String scopeValue = params.get("scope");
                 String requestedRoomId = params.get("roomId");
+                String lastSeqValue = params.get("lastSeq");
 
                 if (StrUtil.isBlank(deviceId)) {
                     log.warn("握手失败: deviceID 为空");
@@ -78,6 +79,12 @@ public class AuthHandshakeHandler extends ChannelDuplexHandler {
                 }
                 if (scope == ConnectionScope.ROOM && StrUtil.isBlank(requestedRoomId)) {
                     log.warn("握手失败: ROOM连接缺少roomId");
+                    ctx.close();
+                    return;
+                }
+                Long lastSeq = parseLastSeq(lastSeqValue);
+                if (lastSeq == null) {
+                    log.warn("握手失败: lastSeq非法");
                     ctx.close();
                     return;
                 }
@@ -103,6 +110,7 @@ public class AuthHandshakeHandler extends ChannelDuplexHandler {
                 ctx.channel().attr(SessionManager.KEY_CONNECTION_SCOPE).set(scope);
                 if (scope == ConnectionScope.ROOM) {
                     ctx.channel().attr(SessionManager.KEY_REQUESTED_ROOM_ID).set(requestedRoomId);
+                    ctx.channel().attr(SessionManager.KEY_LAST_SEQ).set(lastSeq);
                 }
                 // --- D. 关键处理：Token 协议头 ---
                 request.headers().remove("Sec-WebSocket-Protocol");
@@ -123,6 +131,16 @@ public class AuthHandshakeHandler extends ChannelDuplexHandler {
         try {
             return ConnectionScope.valueOf(scopeValue.trim().toUpperCase());
         } catch (IllegalArgumentException exception) {
+            return null;
+        }
+    }
+
+    private Long parseLastSeq(String value) {
+        if (StrUtil.isBlank(value)) return 0L;
+        try {
+            long lastSeq = Long.parseLong(value);
+            return lastSeq >= 0 ? lastSeq : null;
+        } catch (NumberFormatException exception) {
             return null;
         }
     }

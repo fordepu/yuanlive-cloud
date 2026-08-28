@@ -2,6 +2,8 @@ package blog.yuanyuan.yuanlive.live.server;
 
 import blog.yuanyuan.yuanlive.live.service.LiveMessageService;
 import blog.yuanyuan.yuanlive.live.realtime.ConnectionScope;
+import blog.yuanyuan.yuanlive.live.realtime.replay.RoomEventBuffer;
+import blog.yuanyuan.yuanlive.live.realtime.replay.RoomReplayResult;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import io.netty.channel.ChannelHandlerContext;
 import io.netty.handler.codec.http.websocketx.TextWebSocketFrame;
@@ -22,16 +24,19 @@ class NettyServerHandlerTest {
     private LiveMessageService liveMessageService;
     private SessionManager sessionManager;
     private ChannelHandlerContext context;
+    private RoomEventBuffer roomEventBuffer;
 
     @BeforeEach
     void setUp() {
         handler = new NettyServerHandler();
         liveMessageService = mock(LiveMessageService.class);
         sessionManager = mock(SessionManager.class);
+        roomEventBuffer = mock(RoomEventBuffer.class);
         context = mock(ChannelHandlerContext.class);
         ReflectionTestUtils.setField(handler, "liveMessageService", liveMessageService);
         ReflectionTestUtils.setField(handler, "sessionManager", sessionManager);
         ReflectionTestUtils.setField(handler, "objectMapper", new ObjectMapper());
+        ReflectionTestUtils.setField(handler, "roomEventBuffer", roomEventBuffer);
     }
 
     @Test
@@ -121,7 +126,45 @@ class NettyServerHandlerTest {
                         && "device-1".equals(join.getData().getDevice())));
     }
 
+    @Test
+    void replaysBufferedEventsAfterRoomHandshakeFromLastSequence() throws Exception {
+        io.netty.channel.Channel channel = roomHandshakeChannel(7L);
+        blog.yuanyuan.yuanlive.live.realtime.RealtimeEvent event = new blog.yuanyuan.yuanlive.live.realtime.RealtimeEvent(
+                "event-8", 8L, ConnectionScope.ROOM, "room-1", "CHAT", 100L,
+                com.fasterxml.jackson.databind.node.JsonNodeFactory.instance.objectNode());
+        when(roomEventBuffer.replayAfter("room-1", 7L)).thenReturn(RoomReplayResult.replayed(java.util.List.of(event)));
+
+        handler.userEventTriggered(context, WebSocketServerProtocolHandler.ServerHandshakeStateEvent.HANDSHAKE_COMPLETE);
+
+        verify(channel).writeAndFlush(org.mockito.ArgumentMatchers.argThat(frame -> frame instanceof TextWebSocketFrame
+                && ((TextWebSocketFrame) frame).text().contains("event-8")));
+    }
+
     private void invoke(String payload) throws Exception {
         ReflectionTestUtils.invokeMethod(handler, "channelRead0", context, new TextWebSocketFrame(payload));
+    }
+
+    private io.netty.channel.Channel roomHandshakeChannel(long lastSeq) {
+        io.netty.channel.Channel channel = mock(io.netty.channel.Channel.class);
+        @SuppressWarnings("unchecked") io.netty.util.Attribute<Long> userId = mock(io.netty.util.Attribute.class);
+        @SuppressWarnings("unchecked") io.netty.util.Attribute<String> deviceId = mock(io.netty.util.Attribute.class);
+        @SuppressWarnings("unchecked") io.netty.util.Attribute<ConnectionScope> scope = mock(io.netty.util.Attribute.class);
+        @SuppressWarnings("unchecked") io.netty.util.Attribute<String> requestedRoom = mock(io.netty.util.Attribute.class);
+        @SuppressWarnings("unchecked") io.netty.util.Attribute<String> traceId = mock(io.netty.util.Attribute.class);
+        @SuppressWarnings("unchecked") io.netty.util.Attribute<Long> storedLastSeq = mock(io.netty.util.Attribute.class);
+        when(context.channel()).thenReturn(channel);
+        when(channel.attr(SessionManager.KEY_USER_ID)).thenReturn(userId);
+        when(channel.attr(SessionManager.KEY_DEVICE_ID)).thenReturn(deviceId);
+        when(channel.attr(SessionManager.KEY_CONNECTION_SCOPE)).thenReturn(scope);
+        when(channel.attr(SessionManager.KEY_REQUESTED_ROOM_ID)).thenReturn(requestedRoom);
+        when(channel.attr(SessionManager.KEY_TRACE_ID)).thenReturn(traceId);
+        when(channel.attr(SessionManager.KEY_LAST_SEQ)).thenReturn(storedLastSeq);
+        when(userId.get()).thenReturn(1001L);
+        when(deviceId.get()).thenReturn("device-1");
+        when(scope.get()).thenReturn(ConnectionScope.ROOM);
+        when(requestedRoom.get()).thenReturn("room-1");
+        when(traceId.get()).thenReturn("trace-1");
+        when(storedLastSeq.get()).thenReturn(lastSeq);
+        return channel;
     }
 }
