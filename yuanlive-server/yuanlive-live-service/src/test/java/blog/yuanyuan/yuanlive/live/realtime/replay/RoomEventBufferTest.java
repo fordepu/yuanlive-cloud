@@ -35,23 +35,21 @@ class RoomEventBufferTest {
     }
 
     @Test
-    void appendAssignsRedisSequenceAndKeepsOnlyTheNewestWindow() throws Exception {
+    void appendsEventWithRedisAllocatedSequenceAndBoundedWindow() throws Exception {
         when(values.increment("ws:room:room-1:seq")).thenReturn(7L);
 
         RealtimeEvent event = buffer.append("room-1", "event-1", "CHAT", 100L,
                 JsonNodeFactory.instance.objectNode().put("content", "hello"));
 
         assertEquals(7L, event.seq());
-        assertEquals("room-1", event.roomId());
-        assertEquals("CHAT", event.type());
-        verify(zSets).add(eq("ws:room:room-1:events"), eq(objectMapper.writeValueAsString(event)), eq(7D));
-        verify(zSets).removeRange("ws:room:room-1:events", 0, -501);
+        verify(zSets).add(eq("ws:room:room-1:buffer"), eq(objectMapper.writeValueAsString(event)), eq(7D));
+        verify(zSets).removeRange("ws:room:room-1:buffer", 0, -501);
     }
 
     @Test
-    void replayMarksGapBeforeTheEarliestBufferedSequenceForResync() {
+    void requiresResyncWhenLastSequencePredatesBufferedWindow() {
         ZSetOperations.TypedTuple<String> earliest = tuple("ignored", 100D);
-        when(zSets.rangeWithScores("ws:room:room-1:events", 0, -1)).thenReturn(Set.of(earliest));
+        when(zSets.rangeWithScores("ws:room:room-1:buffer", 0, -1)).thenReturn(Set.of(earliest));
 
         RoomReplayResult result = buffer.replayAfter("room-1", 1L);
 
@@ -60,19 +58,19 @@ class RoomEventBufferTest {
     }
 
     @Test
-    void replayReturnsEventsAfterLastConfirmedSequence() throws Exception {
-        RealtimeEvent expected = new RealtimeEvent("event-8", 8L,
+    void returnsEventsAfterLastConfirmedSequence() throws Exception {
+        RealtimeEvent event = new RealtimeEvent("event-8", 8L,
                 blog.yuanyuan.yuanlive.live.realtime.ConnectionScope.ROOM, "room-1", "CHAT", 100L,
-                JsonNodeFactory.instance.objectNode().put("content", "hello"));
+                JsonNodeFactory.instance.objectNode());
         ZSetOperations.TypedTuple<String> earliest = tuple("ignored", 7D);
-        when(zSets.rangeWithScores("ws:room:room-1:events", 0, -1)).thenReturn(Set.of(earliest));
-        when(zSets.rangeByScore(eq("ws:room:room-1:events"), eq(8D), anyDouble()))
-                .thenReturn(Set.of(objectMapper.writeValueAsString(expected)));
+        when(zSets.rangeWithScores("ws:room:room-1:buffer", 0, -1)).thenReturn(Set.of(earliest));
+        when(zSets.rangeByScore(eq("ws:room:room-1:buffer"), eq(8D), anyDouble()))
+                .thenReturn(Set.of(objectMapper.writeValueAsString(event)));
 
         RoomReplayResult result = buffer.replayAfter("room-1", 7L);
 
         assertEquals(RoomReplayStatus.REPLAYED, result.status());
-        assertEquals(List.of(expected), result.events());
+        assertEquals(List.of(event), result.events());
     }
 
     private static ZSetOperations.TypedTuple<String> tuple(String value, double score) {

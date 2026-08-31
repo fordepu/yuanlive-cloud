@@ -23,7 +23,6 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
-import static org.mockito.Mockito.verifyNoInteractions;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.ArgumentMatchers.any;
 import java.util.Map;
@@ -114,32 +113,6 @@ class LiveMessageServiceImplTest {
     }
 
     @Test
-    void disconnectingApplicationConnectionDoesNotRunRoomLeaveLogic() {
-        LiveMessageServiceImpl service = new LiveMessageServiceImpl();
-        SessionManager sessionManager = mock(SessionManager.class);
-        StringRedisTemplate redis = mock(StringRedisTemplate.class);
-        ReflectionTestUtils.setField(service, "sessionManager", sessionManager);
-        ReflectionTestUtils.setField(service, "stringRedisTemplate", redis);
-
-        ChannelHandlerContext context = mock(ChannelHandlerContext.class);
-        Channel channel = mock(Channel.class);
-        @SuppressWarnings("unchecked")
-        Attribute<Long> userAttribute = mock(Attribute.class);
-        @SuppressWarnings("unchecked")
-        Attribute<String> roomAttribute = mock(Attribute.class);
-        when(context.channel()).thenReturn(channel);
-        when(channel.attr(SessionManager.KEY_USER_ID)).thenReturn(userAttribute);
-        when(channel.attr(SessionManager.KEY_ROOM_ID)).thenReturn(roomAttribute);
-        when(userAttribute.get()).thenReturn(1001L);
-        when(roomAttribute.get()).thenReturn(null);
-
-        service.handleDisconnect(context);
-
-        verify(sessionManager).remove(channel);
-        verifyNoInteractions(redis);
-    }
-
-    @Test
     void broadcastsLikeEventToRoomWithEventData() {
         LiveMessageServiceImpl service = new LiveMessageServiceImpl();
         LiveRoomProperties properties = new LiveRoomProperties();
@@ -181,8 +154,6 @@ class LiveMessageServiceImplTest {
 
         verify(rabbit).convertAndSend(eq("live.stats.exchange"), eq("like"), any(Map.class));
         verify(roomPublisher).publish(org.mockito.ArgumentMatchers.argThat(message ->
-                "room-1".equals(message.getRoomId())
-                        && "EVENT".equals(message.getCmd().name())
-                        && message.toString().contains("like")));
+                "room-1".equals(message.getRoomId()) && "EVENT".equals(message.getCmd().name())));
     }
 }

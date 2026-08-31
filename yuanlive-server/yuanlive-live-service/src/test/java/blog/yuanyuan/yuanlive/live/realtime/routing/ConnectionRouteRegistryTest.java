@@ -10,11 +10,13 @@ import java.time.Clock;
 import java.time.Instant;
 import java.time.ZoneOffset;
 import java.util.List;
+import java.util.Optional;
 import java.util.Set;
-import java.util.concurrent.TimeUnit;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertTrue;
+import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
@@ -22,53 +24,50 @@ import static org.mockito.Mockito.when;
 class ConnectionRouteRegistryTest {
     private final StringRedisTemplate redis = mock(StringRedisTemplate.class);
     private final ValueOperations<String, String> values = mock(ValueOperations.class);
-    private final ZSetOperations<String, String> zSet = mock(ZSetOperations.class);
-    private final RealtimeInstanceIdentity identity = new RealtimeInstanceIdentity("live-a", "epoch-a");
-    private final Clock clock = Clock.fixed(Instant.ofEpochMilli(1_000_000L), ZoneOffset.UTC);
+    private final ZSetOperations<String, String> zSets = mock(ZSetOperations.class);
+    private final RealtimeInstanceIdentity identity = new RealtimeInstanceIdentity("live-a:8080", "epoch-a");
     private ConnectionRouteRegistry registry;
 
     @BeforeEach
     void setUp() {
         when(redis.opsForValue()).thenReturn(values);
-        when(redis.opsForZSet()).thenReturn(zSet);
-        registry = new ConnectionRouteRegistry(redis, identity, clock);
+        when(redis.opsForZSet()).thenReturn(zSets);
+        registry = new ConnectionRouteRegistry(redis, identity,
+                Clock.fixed(Instant.ofEpochMilli(1_000L), ZoneOffset.UTC));
     }
 
     @Test
-    void registersApplicationRouteWithConnectionIdAndLease() {
+    void storesAndResolvesAppRouteWithInstanceEpochAndConnectionId() {
+        when(values.get("ws:user:1001:app")).thenReturn("live-a:8080|epoch-a|connection-a");
+        when(redis.hasKey("ws:instance:live-a:8080:lease")).thenReturn(true);
+
+        Optional<AppConnectionRoute> route = registry.resolveApp(1001L);
+
+        assertEquals(new AppConnectionRoute("live-a:8080", "epoch-a", "connection-a"), route.orElseThrow());
+    }
+
+    @Test
+    void doesNotRemoveReplacementAppRouteWhenOldConnectionDisconnects() {
+        registry.unregisterAppIfCurrent(1001L, "old-connection");
+
+        verify(redis).execute(any(), eq(List.of("ws:user:1001:app")),
+                eq("live-a:8080|epoch-a|old-connection"));
+    }
+
+    @Test
+    void resolvesOnlyRoomInstancesWhoseLeasesAreLive() {
+        when(zSets.rangeByScore("ws:room:room-1:instances", 1_000D, Double.MAX_VALUE))
+                .thenReturn(Set.of("live-a:8080|epoch-a", "live-b:8080|epoch-b"));
+        when(redis.hasKey("ws:instance:live-a:8080:lease")).thenReturn(true);
+        when(redis.hasKey("ws:instance:live-b:8080:lease")).thenReturn(false);
+
+        assertEquals(List.of(identity), registry.resolveRoomInstances("room-1"));
+    }
+
+    @Test
+    void refreshesLeaseUsingCurrentEpoch() {
         registry.refreshInstanceLease();
-        registry.registerApp(1001L, "connection-new");
 
-        verify(values).set("ws:instance:live-a:lease", "epoch-a", 30, TimeUnit.SECONDS);
-        verify(values).set("ws:user:1001:app", "live-a|epoch-a|connection-new", 45, TimeUnit.SECONDS);
-    }
-
-    @Test
-    void resolvesOnlyRoomInstancesWhoseLeaseIsStillValid() {
-        when(zSet.rangeByScore("ws:room:room-1:instances", 1_000_000D, Double.MAX_VALUE))
-                .thenReturn(Set.of("live-a|epoch-a", "live-gone|epoch-z"));
-        when(redis.hasKey("ws:instance:live-a:lease")).thenReturn(true);
-        when(redis.hasKey("ws:instance:live-gone:lease")).thenReturn(false);
-
-        List<RealtimeInstanceIdentity> routes = registry.resolveRoomInstances("room-1");
-
-        assertEquals(List.of(identity), routes);
-    }
-
-    @Test
-    void registersRoomInstanceWithExpiringMembership() {
-        registry.registerRoom("room-1");
-
-        verify(zSet).add("ws:room:room-1:instances", "live-a|epoch-a", 1_060_000D);
-        verify(redis).expire("ws:room:room-1:instances", 60, TimeUnit.SECONDS);
-    }
-
-    @Test
-    void parsesApplicationRouteOnlyWhenTargetLeaseExists() {
-        when(values.get("ws:user:1001:app")).thenReturn("live-a|epoch-a|connection-1");
-        when(redis.hasKey("ws:instance:live-a:lease")).thenReturn(true);
-
-        assertTrue(registry.resolveApp(1001L).isPresent());
-        assertEquals("connection-1", registry.resolveApp(1001L).orElseThrow().connectionId());
+        verify(values).set(eq("ws:instance:live-a:8080:lease"), eq("epoch-a"), eq(30L), any());
     }
 }

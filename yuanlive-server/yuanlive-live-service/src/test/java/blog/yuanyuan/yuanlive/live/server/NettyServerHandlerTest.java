@@ -2,6 +2,7 @@ package blog.yuanyuan.yuanlive.live.server;
 
 import blog.yuanyuan.yuanlive.live.service.LiveMessageService;
 import blog.yuanyuan.yuanlive.live.realtime.ConnectionScope;
+import blog.yuanyuan.yuanlive.live.realtime.RealtimeEvent;
 import blog.yuanyuan.yuanlive.live.realtime.replay.RoomEventBuffer;
 import blog.yuanyuan.yuanlive.live.realtime.replay.RoomReplayResult;
 import com.fasterxml.jackson.databind.ObjectMapper;
@@ -31,12 +32,14 @@ class NettyServerHandlerTest {
         handler = new NettyServerHandler();
         liveMessageService = mock(LiveMessageService.class);
         sessionManager = mock(SessionManager.class);
-        roomEventBuffer = mock(RoomEventBuffer.class);
         context = mock(ChannelHandlerContext.class);
+        roomEventBuffer = mock(RoomEventBuffer.class);
         ReflectionTestUtils.setField(handler, "liveMessageService", liveMessageService);
         ReflectionTestUtils.setField(handler, "sessionManager", sessionManager);
         ReflectionTestUtils.setField(handler, "objectMapper", new ObjectMapper());
         ReflectionTestUtils.setField(handler, "roomEventBuffer", roomEventBuffer);
+        when(roomEventBuffer.replayAfter(org.mockito.ArgumentMatchers.anyString(), org.mockito.ArgumentMatchers.anyLong()))
+                .thenReturn(RoomReplayResult.replayed(java.util.List.of()));
     }
 
     @Test
@@ -127,10 +130,9 @@ class NettyServerHandlerTest {
     }
 
     @Test
-    void replaysBufferedEventsAfterRoomHandshakeFromLastSequence() throws Exception {
+    void replaysEventsAfterRoomHandshakeFromLastSequence() throws Exception {
         io.netty.channel.Channel channel = roomHandshakeChannel(7L);
-        blog.yuanyuan.yuanlive.live.realtime.RealtimeEvent event = new blog.yuanyuan.yuanlive.live.realtime.RealtimeEvent(
-                "event-8", 8L, ConnectionScope.ROOM, "room-1", "CHAT", 100L,
+        RealtimeEvent event = new RealtimeEvent("event-8", 8L, ConnectionScope.ROOM, "room-1", "CHAT", 100L,
                 com.fasterxml.jackson.databind.node.JsonNodeFactory.instance.objectNode());
         when(roomEventBuffer.replayAfter("room-1", 7L)).thenReturn(RoomReplayResult.replayed(java.util.List.of(event)));
 
@@ -167,4 +169,5 @@ class NettyServerHandlerTest {
         when(storedLastSeq.get()).thenReturn(lastSeq);
         return channel;
     }
+
 }

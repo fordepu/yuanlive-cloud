@@ -10,18 +10,19 @@ import io.netty.channel.group.ChannelGroup;
 import io.netty.handler.codec.http.websocketx.TextWebSocketFrame;
 import org.springframework.stereotype.Component;
 
-/** 将已路由到本实例的实时事件写入本机 WebSocket 连接。 */
+import java.util.concurrent.ConcurrentHashMap;
+
+/** 校验路由与当前进程身份后写入本机连接，并以 eventId 抑制路由重叠造成的重复展示。 */
 @Component
 public class LocalRealtimeEventDelivery {
-    private final SessionManager sessionManager;
+    private static final int MAX_EVENT_IDS = 10_000;
+    private final SessionManager sessions;
     private final RealtimeInstanceIdentity identity;
     private final ObjectMapper objectMapper;
+    private final ConcurrentHashMap<String, Boolean> deliveredEventIds = new ConcurrentHashMap<>();
 
-    public LocalRealtimeEventDelivery(
-            SessionManager sessionManager,
-            RealtimeInstanceIdentity identity,
-            ObjectMapper objectMapper) {
-        this.sessionManager = sessionManager;
+    public LocalRealtimeEventDelivery(SessionManager sessions, RealtimeInstanceIdentity identity, ObjectMapper objectMapper) {
+        this.sessions = sessions;
         this.identity = identity;
         this.objectMapper = objectMapper;
     }
@@ -30,15 +31,20 @@ public class LocalRealtimeEventDelivery {
         if (!identity.instanceId().equals(message.targetInstanceId()) || !identity.epoch().equals(message.targetEpoch())) {
             return RealtimeDeliveryStatus.ROUTE_STALE;
         }
+        if (deliveredEventIds.containsKey(message.event().eventId())) {
+            return RealtimeDeliveryStatus.DUPLICATE;
+        }
         try {
             String payload = objectMapper.writeValueAsString(message.event());
-            if (message.event().scope() == ConnectionScope.APP) {
-                return deliverApp(message, payload);
+            RealtimeDeliveryStatus result = message.event().scope() == ConnectionScope.APP
+                    ? deliverApp(message, payload)
+                    : deliverRoom(message.event().roomId(), payload);
+            // 仅在真正写入本机连接后去重；ROUTE_STALE 必须保留给发送方刷新目录后重投。
+            if (result == RealtimeDeliveryStatus.DELIVERED) {
+                deliveredEventIds.put(message.event().eventId(), Boolean.TRUE);
+                if (deliveredEventIds.size() > MAX_EVENT_IDS) deliveredEventIds.clear();
             }
-            if (message.event().scope() == ConnectionScope.ROOM) {
-                return deliverRoom(message.event().roomId(), payload);
-            }
-            return RealtimeDeliveryStatus.ROUTE_STALE;
+            return result;
         } catch (JsonProcessingException exception) {
             throw new IllegalArgumentException("实时事件序列化失败", exception);
         }
@@ -46,16 +52,15 @@ public class LocalRealtimeEventDelivery {
 
     private RealtimeDeliveryStatus deliverApp(InstanceDispatchMessage message, String payload) {
         if (message.targetUserId() == null || message.targetConnectionId() == null) return RealtimeDeliveryStatus.ROUTE_STALE;
-        Channel channel = sessionManager.getUserChannel(message.targetUserId());
+        Channel channel = sessions.getUserChannel(message.targetUserId());
         if (channel == null || !channel.isActive()) return RealtimeDeliveryStatus.ROUTE_STALE;
-        String currentConnectionId = channel.attr(SessionManager.KEY_CONNECTION_ID).get();
-        if (!message.targetConnectionId().equals(currentConnectionId)) return RealtimeDeliveryStatus.ROUTE_STALE;
+        if (!message.targetConnectionId().equals(channel.attr(SessionManager.KEY_CONNECTION_ID).get())) return RealtimeDeliveryStatus.ROUTE_STALE;
         channel.writeAndFlush(new TextWebSocketFrame(payload));
         return RealtimeDeliveryStatus.DELIVERED;
     }
 
     private RealtimeDeliveryStatus deliverRoom(String roomId, String payload) {
-        ChannelGroup group = sessionManager.getRoomChannels(roomId);
+        ChannelGroup group = sessions.getRoomChannels(roomId);
         if (group == null || group.isEmpty()) return RealtimeDeliveryStatus.ROUTE_STALE;
         group.writeAndFlush(new TextWebSocketFrame(payload));
         return RealtimeDeliveryStatus.DELIVERED;

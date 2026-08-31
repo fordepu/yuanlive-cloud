@@ -9,17 +9,14 @@ import org.springframework.stereotype.Component;
 
 import java.util.UUID;
 
-/** 房间广播的唯一入口：先获得可补拉的 seq，再按连接所在实例定向投递。 */
+/** 房间展示事件的唯一入口：先持久短期补拉缓冲，再按实际承载实例定向下发。 */
 @Component
 public class RoomRealtimeEventPublisher {
     private final RoomEventBuffer buffer;
     private final RealtimeEventDispatcher dispatcher;
     private final ObjectMapper objectMapper;
 
-    public RoomRealtimeEventPublisher(
-            RoomEventBuffer buffer,
-            RealtimeEventDispatcher dispatcher,
-            ObjectMapper objectMapper) {
+    public RoomRealtimeEventPublisher(RoomEventBuffer buffer, RealtimeEventDispatcher dispatcher, ObjectMapper objectMapper) {
         this.buffer = buffer;
         this.dispatcher = dispatcher;
         this.objectMapper = objectMapper;
@@ -31,11 +28,7 @@ public class RoomRealtimeEventPublisher {
         }
         String eventId = StrUtil.isBlank(message.getMsgId()) ? UUID.randomUUID().toString() : message.getMsgId();
         long timestamp = message.getTimestamp() == null ? System.currentTimeMillis() / 1000 : message.getTimestamp();
-        RealtimeEvent event = buffer.append(
-                message.getRoomId(),
-                eventId,
-                message.getCmd().name(),
-                timestamp,
+        RealtimeEvent event = buffer.append(message.getRoomId(), eventId, message.getCmd().name(), timestamp,
                 objectMapper.valueToTree(message));
         dispatcher.dispatchToRoom(message.getRoomId(), event);
         return event;

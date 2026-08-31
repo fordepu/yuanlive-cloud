@@ -70,7 +70,7 @@ public class SessionManager {
         String connectionId = UUID.randomUUID().toString();
         channel.attr(KEY_CONNECTION_ID).set(connectionId);
         register(userId, channel);
-        if (connectionRouteRegistry != null) connectionRouteRegistry.registerApp(userId, connectionId);
+        connectionRouteRegistry.registerApp(userId, connectionId);
     }
 
     /**
@@ -92,20 +92,10 @@ public class SessionManager {
         ChannelGroup group = ROOM_MAP.computeIfAbsent(roomId, k ->
                 new DefaultChannelGroup(GlobalEventExecutor.INSTANCE)
         );
-        boolean added = group.add(channel);
-        if (added && connectionRouteRegistry != null) connectionRouteRegistry.registerRoom(roomId);
-        log.info("连接[{}] 加入房间[{}]", channel.id(), roomId);
-    }
-
-    /** 在业务离场完成前移除本机房间组，并在最后一个连接离开时撤销实例路由。 */
-    public void removeRoomChannel(String roomId, Channel channel) {
-        ChannelGroup group = ROOM_MAP.get(roomId);
-        if (group == null) return;
-        group.remove(channel);
-        if (group.isEmpty()) {
-            ROOM_MAP.remove(roomId, group);
-            if (connectionRouteRegistry != null) connectionRouteRegistry.unregisterRoom(roomId);
+        if (group.add(channel)) {
+            connectionRouteRegistry.registerRoom(roomId);
         }
+        log.info("连接[{}] 加入房间[{}]", channel.id(), roomId);
     }
 
     /**
@@ -126,13 +116,11 @@ public class SessionManager {
                 MDC.put("roomId", roomId);
             }
             ConnectionScope scope = channel.attr(KEY_CONNECTION_SCOPE).get();
-            if (userId != null && (scope == ConnectionScope.APP || scope == ConnectionScope.LEGACY || scope == null)) {
+            if (userId != null && scope == ConnectionScope.APP) {
                 // 仅当断开的是当前映射的 Channel 才删除，旧连接不能清掉新主连接。
                 USER_MAP.remove(userId, channel);
                 String connectionId = channel.attr(KEY_CONNECTION_ID).get();
-                if (scope == ConnectionScope.APP && connectionId != null && connectionRouteRegistry != null) {
-                    connectionRouteRegistry.unregisterAppIfCurrent(userId, connectionId);
-                }
+                if (connectionId != null) connectionRouteRegistry.unregisterAppIfCurrent(userId, connectionId);
                 log.info("用户[{}] 断开连接", userId);
             }
             if (userId != null) {
@@ -149,6 +137,16 @@ public class SessionManager {
             MDC.remove("traceId");
             MDC.remove("userId");
             MDC.remove("roomId");
+        }
+    }
+
+    /** 房间连接离场时，最后一个本机连接离开才撤销该实例的房间路由。 */
+    public void removeRoomChannel(String roomId, Channel channel) {
+        ChannelGroup group = ROOM_MAP.get(roomId);
+        if (group == null) return;
+        group.remove(channel);
+        if (group.isEmpty() && ROOM_MAP.remove(roomId, group)) {
+            connectionRouteRegistry.unregisterRoom(roomId);
         }
     }
 

@@ -24,12 +24,7 @@ class RoomRealtimeEventPublisherTest {
         RealtimeEvent event = new RealtimeEvent("event-1", 9L, ConnectionScope.ROOM, "room-1", "EVENT", 100L,
                 JsonNodeFactory.instance.objectNode());
         when(buffer.append(eq("room-1"), eq("event-1"), eq("EVENT"), eq(100L), any())).thenReturn(event);
-
-        EventMessage message = EventMessage.builder()
-                .roomId("room-1")
-                .msgId("event-1")
-                .timestamp(100L)
-                .build();
+        EventMessage message = EventMessage.builder().roomId("room-1").msgId("event-1").timestamp(100L).build();
 
         RealtimeEvent result = publisher.publish(message);
 

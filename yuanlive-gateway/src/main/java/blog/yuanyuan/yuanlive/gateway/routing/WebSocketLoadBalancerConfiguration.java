@@ -1,0 +1,17 @@
+package blog.yuanyuan.yuanlive.gateway.routing;
+
+import org.springframework.beans.factory.ObjectProvider;
+import org.springframework.cloud.loadbalancer.annotation.LoadBalancerClient;
+import org.springframework.cloud.loadbalancer.core.ReactorServiceInstanceLoadBalancer;
+import org.springframework.cloud.loadbalancer.core.ServiceInstanceListSupplier;
+import org.springframework.context.annotation.Bean;
+import org.springframework.context.annotation.Configuration;
+
+@Configuration(proxyBeanMethods = false)
+@LoadBalancerClient(name = "live-service", configuration = WebSocketLoadBalancerConfiguration.class)
+public class WebSocketLoadBalancerConfiguration {
+    @Bean
+    ReactorServiceInstanceLoadBalancer liveServiceLoadBalancer(ObjectProvider<ServiceInstanceListSupplier> supplierProvider) {
+        return new WebSocketRendezvousLoadBalancer(supplierProvider, "live-service");
+    }
+}

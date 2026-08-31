@@ -39,4 +39,10 @@ class RealtimeEventTest {
         assertDoesNotThrow(() -> new RealtimeEvent(
                 "event-1", null, ConnectionScope.APP, null, "NOTICE", 1L, JsonNodeFactory.instance.nullNode()));
     }
+
+    @Test
+    void exposesOnlyApplicationAndRoomConnectionScopes() {
+        assertEquals(java.util.Set.of(ConnectionScope.APP, ConnectionScope.ROOM),
+                java.util.EnumSet.allOf(ConnectionScope.class));
+    }
 }

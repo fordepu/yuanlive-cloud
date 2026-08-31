@@ -107,9 +107,6 @@ public class NettyServerHandler extends SimpleChannelInboundHandler<TextWebSocke
                         sessionManager.registerAppChannel(userId, ctx.channel());
                     } else if (scope == ConnectionScope.ROOM) {
                         joinRequestedRoom(ctx, deviceId);
-                    } else {
-                        // 旧客户端未携带 scope，继续复用其首帧 JOIN_ROOM 协议。
-                        sessionManager.register(userId, ctx.channel());
                     }
                     log.info("用户[{}] 设备[{}] scope=[{}] 握手成功", userId, deviceId, scope);
                 }
@@ -142,11 +139,11 @@ public class NettyServerHandler extends SimpleChannelInboundHandler<TextWebSocke
         io.netty.util.Attribute<Long> lastSeqAttribute = ctx.channel().attr(SessionManager.KEY_LAST_SEQ);
         Long lastSeq = lastSeqAttribute == null ? 0L : lastSeqAttribute.get();
         RoomReplayResult replay = roomEventBuffer.replayAfter(roomId, lastSeq == null ? 0L : lastSeq);
-        if (replay == null) return;
         if (replay.status() == RoomReplayStatus.RESYNC_REQUIRED) {
             ctx.channel().writeAndFlush(new TextWebSocketFrame("{\"type\":\"RESYNC_REQUIRED\",\"roomId\":\"" + roomId + "\"}"));
             return;
         }
-        replay.events().forEach(event -> ctx.channel().writeAndFlush(new TextWebSocketFrame(objectMapper.valueToTree(event).toString())));
+        replay.events().forEach(event -> ctx.channel().writeAndFlush(
+                new TextWebSocketFrame(objectMapper.valueToTree(event).toString())));
     }
 }

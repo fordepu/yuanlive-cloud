@@ -1,6 +1,6 @@
 package blog.yuanyuan.yuanlive.live.realtime.replay;
 
-/** 房间事件补拉结果。 */
+/** ROOM 重连补拉的结果状态。 */
 public enum RoomReplayStatus {
     REPLAYED,
     RESYNC_REQUIRED

@@ -139,7 +139,7 @@ public class LiveMessageServiceImpl implements LiveMessageService {
                 sendMsg(ctx, response);
                 return;
             }
-            // ROOM 连接一生只服务一个房间；LEGACY 才保留旧客户端的切房兼容。
+            // ROOM 连接一生只服务一个房间，避免同一连接的事件路由发生串房。
             if (currentRoomId != null) {
                 if (scope == ConnectionScope.ROOM) {
                     JoinResponse response = JoinResponse.builder()
@@ -416,7 +416,6 @@ public class LiveMessageServiceImpl implements LiveMessageService {
     private void leaveRoom(ChannelHandlerContext ctx) {
         Long userId = ctx.channel().attr(SessionManager.KEY_USER_ID).get();
         String roomId = ctx.channel().attr(SessionManager.KEY_ROOM_ID).get();
-        if (StrUtil.isBlank(roomId) || userId == null) return;
         log.info("用户[{}] 退出房间[{}]", userId, roomId);
         sessionManager.removeRoomChannel(roomId, ctx.channel());
         ctx.channel().attr(SessionManager.KEY_ROOM_ID).set(null);

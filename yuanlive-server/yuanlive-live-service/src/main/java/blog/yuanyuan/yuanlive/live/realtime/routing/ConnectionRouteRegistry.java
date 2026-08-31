@@ -11,9 +11,7 @@ import java.util.List;
 import java.util.Optional;
 import java.util.concurrent.TimeUnit;
 
-/**
- * Redis 是跨实例连接归属的最终目录。本组件只登记和查询路由，不保存 Channel 对象。
- */
+/** Redis 是跨实例连接归属的最终目录，本组件不保存任何 Netty Channel。 */
 @Component
 public class ConnectionRouteRegistry {
     static final long INSTANCE_LEASE_SECONDS = 30;
@@ -53,22 +51,19 @@ public class ConnectionRouteRegistry {
     }
 
     public Optional<AppConnectionRoute> resolveApp(Long userId) {
-        String value = redis.opsForValue().get(appRouteKey(userId));
-        String[] parts = split(value, 3);
+        String[] parts = split(redis.opsForValue().get(appRouteKey(userId)), 3);
         if (parts == null || !hasLiveLease(parts[0])) return Optional.empty();
         return Optional.of(new AppConnectionRoute(parts[0], parts[1], parts[2]));
     }
 
     public void unregisterAppIfCurrent(Long userId, String connectionId) {
-        String expectedValue = identity.memberValue() + "|" + connectionId;
-        redis.execute(DELETE_IF_VALUE_MATCHES, List.of(appRouteKey(userId)), expectedValue);
+        redis.execute(DELETE_IF_VALUE_MATCHES, List.of(appRouteKey(userId)), identity.memberValue() + "|" + connectionId);
     }
 
     public void registerRoom(String roomId) {
-        String key = roomInstancesKey(roomId);
-        double expiryAt = clock.millis() + TimeUnit.SECONDS.toMillis(ROOM_MEMBER_SECONDS);
-        redis.opsForZSet().add(key, identity.memberValue(), expiryAt);
-        redis.expire(key, ROOM_MEMBER_SECONDS, TimeUnit.SECONDS);
+        redis.opsForZSet().add(roomInstancesKey(roomId), identity.memberValue(),
+                clock.millis() + TimeUnit.SECONDS.toMillis(ROOM_MEMBER_SECONDS));
+        redis.expire(roomInstancesKey(roomId), ROOM_MEMBER_SECONDS, TimeUnit.SECONDS);
     }
 
     public void unregisterRoom(String roomId) {
@@ -76,8 +71,7 @@ public class ConnectionRouteRegistry {
     }
 
     public List<RealtimeInstanceIdentity> resolveRoomInstances(String roomId) {
-        double now = clock.millis();
-        var members = redis.opsForZSet().rangeByScore(roomInstancesKey(roomId), now, Double.MAX_VALUE);
+        var members = redis.opsForZSet().rangeByScore(roomInstancesKey(roomId), clock.millis(), Double.MAX_VALUE);
         if (members == null || members.isEmpty()) return List.of();
         return members.stream()
                 .map(member -> split(member, 2))
@@ -90,11 +84,10 @@ public class ConnectionRouteRegistry {
         return Boolean.TRUE.equals(redis.hasKey(instanceLeaseKey(instanceId)));
     }
 
-    private static String[] split(String value, int expectedParts) {
+    private static String[] split(String value, int size) {
         if (value == null || value.isBlank()) return null;
         String[] parts = value.split("\\|", -1);
-        if (parts.length != expectedParts || Arrays.stream(parts).anyMatch(String::isBlank)) return null;
-        return parts;
+        return parts.length == size && Arrays.stream(parts).noneMatch(String::isBlank) ? parts : null;
     }
 
     private static String instanceLeaseKey(String instanceId) {

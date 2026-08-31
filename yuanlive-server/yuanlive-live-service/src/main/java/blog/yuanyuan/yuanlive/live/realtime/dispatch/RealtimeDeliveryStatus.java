@@ -1,7 +1,8 @@
 package blog.yuanyuan.yuanlive.live.realtime.dispatch;
 
-/** 实例本机投递结果，发送端据此决定是否刷新 Redis 路由。 */
+/** 本机投递结果；路由已过期时由发送方刷新 Redis 目录。 */
 public enum RealtimeDeliveryStatus {
     DELIVERED,
-    ROUTE_STALE
+    ROUTE_STALE,
+    DUPLICATE
 }

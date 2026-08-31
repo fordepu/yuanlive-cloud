@@ -51,7 +51,7 @@ spring:
             - id: websocket-route
               uri: lb:ws://live-service
               predicates:
-                - Path=/ws/**
+                - Path=/ws,/ws/**
 
             - id: ai-service
               uri: lb://ai-service

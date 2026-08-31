@@ -127,7 +127,7 @@ public class AuthHandshakeHandler extends ChannelDuplexHandler {
     }
 
     private ConnectionScope resolveScope(String scopeValue) {
-        if (StrUtil.isBlank(scopeValue)) return ConnectionScope.LEGACY;
+        if (StrUtil.isBlank(scopeValue)) return null;
         try {
             return ConnectionScope.valueOf(scopeValue.trim().toUpperCase());
         } catch (IllegalArgumentException exception) {

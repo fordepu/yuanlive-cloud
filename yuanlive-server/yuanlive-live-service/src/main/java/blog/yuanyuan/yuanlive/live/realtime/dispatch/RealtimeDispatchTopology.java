@@ -5,11 +5,11 @@ import org.springframework.amqp.core.Binding;
 import org.springframework.amqp.core.BindingBuilder;
 import org.springframework.amqp.core.DirectExchange;
 import org.springframework.amqp.core.Queue;
+import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
-import org.springframework.beans.factory.annotation.Qualifier;
 
-/** 每个实例拥有独立队列，跨实例消息只投递给实际承载连接的实例。 */
+/** 每个实例使用带 epoch 的独占队列，跨实例消息不再 fanout 给所有 live-service。 */
 @Configuration
 public class RealtimeDispatchTopology {
     public static final String EXCHANGE = "live.ws.dispatch.exchange";
@@ -30,10 +30,8 @@ public class RealtimeDispatchTopology {
 
     @Bean
     public Binding realtimeInstanceDispatchBinding(
-            @Qualifier("realtimeInstanceDispatchQueue") Queue realtimeInstanceDispatchQueue,
-            @Qualifier("realtimeDispatchExchange") DirectExchange realtimeDispatchExchange) {
-        return BindingBuilder.bind(realtimeInstanceDispatchQueue)
-                .to(realtimeDispatchExchange)
-                .with(realtimeInstanceDispatchQueue.getName());
+            @Qualifier("realtimeInstanceDispatchQueue") Queue queue,
+            @Qualifier("realtimeDispatchExchange") DirectExchange exchange) {
+        return BindingBuilder.bind(queue).to(exchange).with(queue.getName());
     }
 }

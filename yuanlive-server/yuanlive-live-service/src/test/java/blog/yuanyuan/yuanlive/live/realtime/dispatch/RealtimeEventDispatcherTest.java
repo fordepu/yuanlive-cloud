@@ -21,52 +21,52 @@ import static org.mockito.Mockito.when;
 
 class RealtimeEventDispatcherTest {
     private final ConnectionRouteRegistry routes = mock(ConnectionRouteRegistry.class);
-    private final LocalRealtimeEventDelivery localDelivery = mock(LocalRealtimeEventDelivery.class);
-    private final RabbitTemplate rabbitTemplate = mock(RabbitTemplate.class);
-    private final RealtimeInstanceIdentity identity = new RealtimeInstanceIdentity("live-a", "epoch-a");
-    private final RealtimeEventDispatcher dispatcher = new RealtimeEventDispatcher(routes, localDelivery, rabbitTemplate, identity);
+    private final LocalRealtimeEventDelivery local = mock(LocalRealtimeEventDelivery.class);
+    private final RabbitTemplate rabbit = mock(RabbitTemplate.class);
+    private final RealtimeInstanceIdentity localIdentity = new RealtimeInstanceIdentity("live-a:8080", "epoch-a");
+    private final RealtimeEventDispatcher dispatcher = new RealtimeEventDispatcher(routes, local, rabbit, localIdentity);
 
     @Test
-    void broadcastsSingleInstanceRoomLocallyWithoutRabbitMq() {
-        when(routes.resolveRoomInstances("room-1")).thenReturn(List.of(identity));
+    void sendsSingleInstanceRoomEventLocallyWithoutRabbitMq() {
+        when(routes.resolveRoomInstances("room-1")).thenReturn(List.of(localIdentity));
 
         dispatcher.dispatchToRoom("room-1", roomEvent());
 
-        verify(localDelivery).deliver(any(InstanceDispatchMessage.class));
-        verifyNoInteractions(rabbitTemplate);
+        verify(local).deliver(any(InstanceDispatchMessage.class));
+        verifyNoInteractions(rabbit);
     }
 
     @Test
     void sendsRoomEventOnlyToResolvedRemoteInstanceQueue() {
-        RealtimeInstanceIdentity remote = new RealtimeInstanceIdentity("live-b", "epoch-b");
+        RealtimeInstanceIdentity remote = new RealtimeInstanceIdentity("live-b:8080", "epoch-b");
         when(routes.resolveRoomInstances("room-1")).thenReturn(List.of(remote));
 
         dispatcher.dispatchToRoom("room-1", roomEvent());
 
-        verify(rabbitTemplate).convertAndSend(eq(RealtimeDispatchTopology.EXCHANGE),
-                eq(RealtimeDispatchTopology.queueName(remote)), any(InstanceDispatchMessage.class));
-        verifyNoInteractions(localDelivery);
+        verify(rabbit).convertAndSend(eq(RealtimeDispatchTopology.EXCHANGE), eq(RealtimeDispatchTopology.queueName(remote)),
+                any(InstanceDispatchMessage.class));
+        verifyNoInteractions(local);
     }
 
     @Test
-    void sendsApplicationEventToTheResolvedConnectionOnly() {
-        AppConnectionRoute route = new AppConnectionRoute("live-b", "epoch-b", "connection-1");
+    void sendsAppEventToOnlyTheResolvedConnection() {
+        AppConnectionRoute route = new AppConnectionRoute("live-b:8080", "epoch-b", "connection-b");
         when(routes.resolveApp(1001L)).thenReturn(Optional.of(route));
 
         dispatcher.dispatchToApp(1001L, appEvent());
 
-        verify(rabbitTemplate).convertAndSend(eq(RealtimeDispatchTopology.EXCHANGE),
-                eq(RealtimeDispatchTopology.queueName(new RealtimeInstanceIdentity("live-b", "epoch-b"))),
+        verify(rabbit).convertAndSend(eq(RealtimeDispatchTopology.EXCHANGE),
+                eq(RealtimeDispatchTopology.queueName(new RealtimeInstanceIdentity("live-b:8080", "epoch-b"))),
                 any(InstanceDispatchMessage.class));
     }
 
     private static RealtimeEvent roomEvent() {
-        return new RealtimeEvent("event-1", 1L, ConnectionScope.ROOM, "room-1", "CHAT", 1L,
+        return new RealtimeEvent("event-room-1", 1L, ConnectionScope.ROOM, "room-1", "CHAT", 1L,
                 JsonNodeFactory.instance.objectNode());
     }
 
     private static RealtimeEvent appEvent() {
-        return new RealtimeEvent("event-1", null, ConnectionScope.APP, null, "NOTICE", 1L,
+        return new RealtimeEvent("event-app-1", null, ConnectionScope.APP, null, "NOTICE", 1L,
                 JsonNodeFactory.instance.objectNode());
     }
 }
