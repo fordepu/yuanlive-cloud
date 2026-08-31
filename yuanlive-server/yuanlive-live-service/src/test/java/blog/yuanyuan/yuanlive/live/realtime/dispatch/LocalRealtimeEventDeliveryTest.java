@@ -52,7 +52,7 @@ class LocalRealtimeEventDeliveryTest {
                 JsonNodeFactory.instance.objectNode());
 
         assertEquals(RealtimeDeliveryStatus.DELIVERED,
-                delivery.deliver(new InstanceDispatchMessage("live-a:8080", "epoch-a", 1001L, "connection-a", event)));
+                delivery.deliver(new InstanceDispatchMessage("live-a:8080", "epoch-a", 1001L, "connection-a", event, 0)));
     }
 
     @Test
@@ -69,7 +69,7 @@ class LocalRealtimeEventDeliveryTest {
     }
 
     private static InstanceDispatchMessage message(String epoch, RealtimeEvent event) {
-        return new InstanceDispatchMessage("live-a:8080", epoch, null, null, event);
+        return new InstanceDispatchMessage("live-a:8080", epoch, null, null, event, 0);
     }
 
     private static RealtimeEvent roomEvent(String eventId) {

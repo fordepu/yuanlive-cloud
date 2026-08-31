@@ -104,8 +104,14 @@ public class NettyServerHandler extends SimpleChannelInboundHandler<TextWebSocke
 
                 if (userId != null) {
                     if (scope == ConnectionScope.APP) {
+                        // APP 首次注册会生成 connectionId，第二个握手完成事件只记录日志。
+                        // Attribute 在鉴权阶段可能已被读取并创建，只有具备连接 ID 才代表 APP 握手已初始化。
+                        if (ctx.channel().attr(SessionManager.KEY_CONNECTION_ID).get() != null) return;
                         sessionManager.registerAppChannel(userId, ctx.channel());
                     } else if (scope == ConnectionScope.ROOM) {
+                        // ROOM 首次自动入房会写 roomId，避免两个握手完成事件重复入场。
+                        // 不能仅以 hasAttr 判断已入房，否则首次 ROOM 握手会被错误跳过。
+                        if (ctx.channel().attr(SessionManager.KEY_ROOM_ID).get() != null) return;
                         joinRequestedRoom(ctx, deviceId);
                     }
                     log.info("用户[{}] 设备[{}] scope=[{}] 握手成功", userId, deviceId, scope);

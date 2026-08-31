@@ -7,13 +7,15 @@ import org.springframework.stereotype.Component;
 @Component
 public class RealtimeDispatchConsumer {
     private final LocalRealtimeEventDelivery localDelivery;
+    private final RealtimeEventDispatcher dispatcher;
 
-    public RealtimeDispatchConsumer(LocalRealtimeEventDelivery localDelivery) {
+    public RealtimeDispatchConsumer(LocalRealtimeEventDelivery localDelivery, RealtimeEventDispatcher dispatcher) {
         this.localDelivery = localDelivery;
+        this.dispatcher = dispatcher;
     }
 
     @RabbitListener(queues = "#{@realtimeInstanceDispatchQueue.name}")
     public void consume(InstanceDispatchMessage message) {
-        localDelivery.deliver(message);
+        if (localDelivery.deliver(message) == RealtimeDeliveryStatus.ROUTE_STALE) dispatcher.retry(message);
     }
 }

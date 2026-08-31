@@ -8,5 +8,6 @@ public record InstanceDispatchMessage(
         String targetEpoch,
         Long targetUserId,
         String targetConnectionId,
-        RealtimeEvent event) {
+        RealtimeEvent event,
+        int retryAttempt) {
 }

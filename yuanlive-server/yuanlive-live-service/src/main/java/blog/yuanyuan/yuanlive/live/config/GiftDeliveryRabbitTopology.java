@@ -1,8 +1,6 @@
 package blog.yuanyuan.yuanlive.live.config;
 
-import blog.yuanyuan.yuanlive.live.service.impl.GiftRealtimePublisherImpl;
 import org.springframework.amqp.core.Binding;
-import org.springframework.amqp.core.FanoutExchange;
 import org.springframework.amqp.core.Queue;
 import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.context.annotation.Bean;
@@ -44,8 +42,4 @@ public class GiftDeliveryRabbitTopology {
                 WALLET_DOMAIN_DLX, GIFT_DELIVERED_ROUTING_KEY, null);
     }
 
-    @Bean
-    public FanoutExchange liveRealtimeBroadcastExchange() {
-        return new FanoutExchange(GiftRealtimePublisherImpl.REALTIME_BROADCAST_EXCHANGE, true, false);
-    }
 }

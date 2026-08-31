@@ -22,12 +22,37 @@ import org.springframework.test.util.ReflectionTestUtils;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.verify;
+import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.when;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.ArgumentMatchers.any;
 import java.util.Map;
 
 class LiveMessageServiceImplTest {
+
+    @Test
+    void disconnectingChannelWithoutRoomDoesNotAttemptRoomCleanup() {
+        LiveMessageServiceImpl service = new LiveMessageServiceImpl();
+        SessionManager sessionManager = mock(SessionManager.class);
+        ReflectionTestUtils.setField(service, "sessionManager", sessionManager);
+
+        ChannelHandlerContext context = mock(ChannelHandlerContext.class);
+        Channel channel = mock(Channel.class);
+        @SuppressWarnings("unchecked")
+        Attribute<Long> userIdAttribute = mock(Attribute.class);
+        @SuppressWarnings("unchecked")
+        Attribute<String> roomIdAttribute = mock(Attribute.class);
+        when(context.channel()).thenReturn(channel);
+        when(channel.attr(SessionManager.KEY_USER_ID)).thenReturn(userIdAttribute);
+        when(channel.attr(SessionManager.KEY_ROOM_ID)).thenReturn(roomIdAttribute);
+        when(userIdAttribute.get()).thenReturn(1001L);
+        when(roomIdAttribute.get()).thenReturn(null);
+
+        org.junit.jupiter.api.Assertions.assertDoesNotThrow(() -> service.handleDisconnect(context));
+
+        verify(sessionManager).remove(channel);
+        verify(sessionManager, never()).removeRoomChannel(org.mockito.ArgumentMatchers.anyString(), eq(channel));
+    }
 
     @Test
     void rejectsGroupChatWhenTheChannelHasNotJoinedAnActiveRoom() {

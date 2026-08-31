@@ -1,6 +1,7 @@
 package blog.yuanyuan.yuanlive.live.service.impl;
 
 import blog.yuanyuan.yuanlive.common.exception.ApiException;
+import blog.yuanyuan.yuanlive.common.result.Result;
 import blog.yuanyuan.yuanlive.common.result.ResultCode;
 import blog.yuanyuan.yuanlive.common.result.ResultPage;
 import blog.yuanyuan.yuanlive.common.util.MinioTemplate;
@@ -11,6 +12,7 @@ import blog.yuanyuan.yuanlive.entity.live.entity.VideoResource;
 import blog.yuanyuan.yuanlive.entity.live.vo.SearchVO;
 import blog.yuanyuan.yuanlive.entity.live.vo.VideoSearchVO;
 import blog.yuanyuan.yuanlive.entity.user.entity.SysUser;
+import blog.yuanyuan.yuanlive.entity.user.vo.UserFollowLivingVO;
 import blog.yuanyuan.yuanlive.feign.user.UserFeignClient;
 import blog.yuanyuan.yuanlive.live.domain.document.SearchDoc;
 import blog.yuanyuan.yuanlive.entity.live.dto.LiveRoomDTO;
@@ -23,6 +25,7 @@ import blog.yuanyuan.yuanlive.live.mapper.LiveCategoryMapper;
 import blog.yuanyuan.yuanlive.live.mapper.LiveRoomMapper;
 import blog.yuanyuan.yuanlive.live.mapper.VideoResourceMapper;
 import blog.yuanyuan.yuanlive.live.message.notification.LiveStartMessage;
+import blog.yuanyuan.yuanlive.live.realtime.dispatch.AppRealtimeEventPublisher;
 import blog.yuanyuan.yuanlive.live.properties.LiveRoomProperties;
 import blog.yuanyuan.yuanlive.live.service.LiveCategoryService;
 import blog.yuanyuan.yuanlive.live.service.LiveRoomService;
@@ -36,7 +39,6 @@ import cn.dev33.satoken.stp.StpUtil;
 import cn.hutool.core.collection.CollUtil;
 import cn.hutool.core.util.StrUtil;
 import cn.hutool.http.HttpUtil;
-import cn.hutool.json.JSONUtil;
 import co.elastic.clients.elasticsearch._types.query_dsl.*;
 import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
 import com.baomidou.mybatisplus.extension.service.impl.ServiceImpl;
@@ -105,8 +107,6 @@ public class LiveRoomServiceImpl extends ServiceImpl<LiveRoomMapper, LiveRoom>
     private String anchorMap;
     @Value("${live.hot.hot-rooms}")
     private Integer hotRooms;
-    @Value("${live.mq.chat.exchange}")
-    private String exchange;
     @Value("${live.mq.stats.exchange}")
     private String statsExchange;
     @Value("${file-prefix.host-prefix}")
@@ -119,6 +119,8 @@ public class LiveRoomServiceImpl extends ServiceImpl<LiveRoomMapper, LiveRoom>
     private PopularityUtil popularityUtil;
     @Resource
     private GiftRoomValidationPolicy giftRoomValidationPolicy;
+    @Resource
+    private AppRealtimeEventPublisher appRealtimeEventPublisher;
 
     @Override
     @Transactional(rollbackFor = Exception.class)
@@ -266,7 +268,11 @@ public class LiveRoomServiceImpl extends ServiceImpl<LiveRoomMapper, LiveRoom>
                     .anchorName(liveRoom.getAnchorName())
                     .category(categoryName)
                     .coverImage(liveRoom.getCoverImg()).build();
-            rabbitTemplate.convertAndSend(exchange, "", JSONUtil.toJsonStr(message));
+            // 开播提醒只投递给实际在线的关注者，不再让每个 live-service 消费 fanout 消息。
+            Result<List<UserFollowLivingVO>> followersResult = userFeignClient.getFollowers(uid);
+            if (followersResult != null && followersResult.getData() != null) {
+                followersResult.getData().forEach(follower -> appRealtimeEventPublisher.publish(follower.getUserId(), message));
+            }
         }
         return updated;
     }
@@ -763,5 +769,3 @@ public class LiveRoomServiceImpl extends ServiceImpl<LiveRoomMapper, LiveRoom>
         return String.format("http://localhost:18080/live/%d.flv", roomId);
     }
 }
-
-

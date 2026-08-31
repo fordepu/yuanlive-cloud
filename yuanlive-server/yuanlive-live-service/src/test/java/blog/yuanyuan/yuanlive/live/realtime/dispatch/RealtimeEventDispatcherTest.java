@@ -60,6 +60,20 @@ class RealtimeEventDispatcherTest {
                 any(InstanceDispatchMessage.class));
     }
 
+    @Test
+    void refreshesAppRouteAndRetriesOnceWhenLocalDeliveryIsStale() {
+        AppConnectionRoute oldRoute = new AppConnectionRoute("live-a:8080", "epoch-a", "connection-old");
+        AppConnectionRoute newRoute = new AppConnectionRoute("live-b:8080", "epoch-b", "connection-new");
+        when(routes.resolveApp(1001L)).thenReturn(Optional.of(oldRoute), Optional.of(newRoute));
+        when(local.deliver(any(InstanceDispatchMessage.class))).thenReturn(RealtimeDeliveryStatus.ROUTE_STALE);
+
+        dispatcher.dispatchToApp(1001L, appEvent());
+
+        verify(rabbit).convertAndSend(eq(RealtimeDispatchTopology.EXCHANGE),
+                eq(RealtimeDispatchTopology.queueName(new RealtimeInstanceIdentity("live-b:8080", "epoch-b"))),
+                any(InstanceDispatchMessage.class));
+    }
+
     private static RealtimeEvent roomEvent() {
         return new RealtimeEvent("event-room-1", 1L, ConnectionScope.ROOM, "room-1", "CHAT", 1L,
                 JsonNodeFactory.instance.objectNode());

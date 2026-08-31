@@ -2,6 +2,7 @@ package blog.yuanyuan.yuanlive.live.realtime.routing;
 
 import org.springframework.data.redis.core.StringRedisTemplate;
 import org.springframework.data.redis.core.script.DefaultRedisScript;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Component;
 
@@ -26,6 +27,7 @@ public class ConnectionRouteRegistry {
     private final RealtimeInstanceIdentity identity;
     private final Clock clock;
 
+    @Autowired
     public ConnectionRouteRegistry(StringRedisTemplate redis, RealtimeInstanceIdentity identity) {
         this(redis, identity, Clock.systemUTC());
     }

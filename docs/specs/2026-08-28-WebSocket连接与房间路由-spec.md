@@ -97,18 +97,11 @@ AttributeKey<String> KEY_CONNECTION_ID;      // UUID，防旧连接误删路由
 
 ### 4.1 本地路由缓存与回退
 
-每个发送实例可维护下列进程内存缓存，默认 TTL 为 5 秒，最长不得超过 10 秒：
-
-```text
-appRouteCache[userId] = { instanceId, epoch, connectionId, expireAt }
-roomRouteCache[roomId] = { instances, expireAt }
-```
-
-缓存不是路由事实，不能持久化，也不能跨进程共享。发送过程必须遵循：
+当前实现每次投递直接查询 Redis 路由目录，不使用进程内缓存。后续如引入本地缓存，缓存不是路由事实，不能持久化，也不能跨进程共享，并必须遵循：
 
 1. 缓存有效且其中的实例租约有效时，可据此定向投递。
 2. 缓存未命中、TTL 到期、路由变更通知到达、实例租约无效或目标实例返回 `ROUTE_STALE` 时，立即删除缓存。
-3. 删除后读取 Redis 路由目录，写回新缓存，并以原 `eventId` 重投一次。
+3. 删除后读取 Redis 路由目录，写回新缓存，并以原 `eventId` 重投一次。当前实现已对 `ROUTE_STALE` 直接重新查询 Redis 并最多重投一次。
 4. APP 目标消费者只在 `connectionId` 等于当前 `USER_MAP[userId]` 连接时发送；不等则返回 `ROUTE_STALE`。
 5. ROOM 目标消费者若没有本机 group 或 group 为空，返回 `ROUTE_STALE`；发送方刷新房间实例集合。重复投递由 `eventId` 去重。
 
@@ -141,6 +134,8 @@ live.ws.dispatch.instance-<instanceId>-<epoch>
 
 - `APP`：验证 `USER_MAP[userId]` 的 `connectionId`，写单个 Channel。
 - `ROOM`：从 `ROOM_MAP[roomId]` 获取 group，写本机 group。
+
+所有房间展示事件（聊天、入场、点赞、系统公告和礼物展示）必须先写 `ws:room:{roomId}:buffer`，再由上述定向拓扑投递。旧 `live.mq.chat.exchange` 与 `live.realtime.broadcast.exchange` 的全实例 fanout 消费器不再承担实时展示投递。开播提醒、私密系统通知等 APP 事件由 `AppRealtimeEventPublisher` 读取用户 APP 路由并定向投递。
 
 普通 `CHAT` 在发送者即为当前房间承载实例且 Redis 路由目录（或有效本地缓存）只包含该实例时，直接本机广播，不进入 RabbitMQ。目录含多个实例、缓存失效或发送者非目标实例时，刷新 Redis 路由后按集合进行定向投递。
 

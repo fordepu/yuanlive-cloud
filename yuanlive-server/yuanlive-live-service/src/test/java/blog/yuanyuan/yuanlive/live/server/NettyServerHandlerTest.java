@@ -81,11 +81,14 @@ class NettyServerHandlerTest {
         io.netty.util.Attribute<ConnectionScope> scope = mock(io.netty.util.Attribute.class);
         @SuppressWarnings("unchecked")
         io.netty.util.Attribute<String> traceId = mock(io.netty.util.Attribute.class);
+        @SuppressWarnings("unchecked")
+        io.netty.util.Attribute<String> connectionId = mock(io.netty.util.Attribute.class);
         when(context.channel()).thenReturn(channel);
         when(channel.attr(SessionManager.KEY_USER_ID)).thenReturn(userId);
         when(channel.attr(SessionManager.KEY_DEVICE_ID)).thenReturn(deviceId);
         when(channel.attr(SessionManager.KEY_CONNECTION_SCOPE)).thenReturn(scope);
         when(channel.attr(SessionManager.KEY_TRACE_ID)).thenReturn(traceId);
+        when(channel.attr(SessionManager.KEY_CONNECTION_ID)).thenReturn(connectionId);
         when(userId.get()).thenReturn(1001L);
         when(deviceId.get()).thenReturn("device-1");
         when(scope.get()).thenReturn(ConnectionScope.APP);
@@ -110,12 +113,15 @@ class NettyServerHandlerTest {
         io.netty.util.Attribute<String> requestedRoom = mock(io.netty.util.Attribute.class);
         @SuppressWarnings("unchecked")
         io.netty.util.Attribute<String> traceId = mock(io.netty.util.Attribute.class);
+        @SuppressWarnings("unchecked")
+        io.netty.util.Attribute<String> roomId = mock(io.netty.util.Attribute.class);
         when(context.channel()).thenReturn(channel);
         when(channel.attr(SessionManager.KEY_USER_ID)).thenReturn(userId);
         when(channel.attr(SessionManager.KEY_DEVICE_ID)).thenReturn(deviceId);
         when(channel.attr(SessionManager.KEY_CONNECTION_SCOPE)).thenReturn(scope);
         when(channel.attr(SessionManager.KEY_REQUESTED_ROOM_ID)).thenReturn(requestedRoom);
         when(channel.attr(SessionManager.KEY_TRACE_ID)).thenReturn(traceId);
+        when(channel.attr(SessionManager.KEY_ROOM_ID)).thenReturn(roomId);
         when(userId.get()).thenReturn(1001L);
         when(deviceId.get()).thenReturn("device-1");
         when(scope.get()).thenReturn(ConnectionScope.ROOM);
@@ -127,6 +133,17 @@ class NettyServerHandlerTest {
         verify(liveMessageService).handleJoinRoom(org.mockito.ArgumentMatchers.eq(context),
                 org.mockito.ArgumentMatchers.argThat(join -> "room-1".equals(join.getData().getRoomId())
                         && "device-1".equals(join.getData().getDevice())));
+    }
+
+    @Test
+    void joinsRoomWhenRoomAttributeExistsButHasNoBoundRoom() throws Exception {
+        io.netty.channel.Channel channel = roomHandshakeChannel(0L);
+        when(channel.hasAttr(SessionManager.KEY_ROOM_ID)).thenReturn(true);
+
+        handler.userEventTriggered(context, WebSocketServerProtocolHandler.ServerHandshakeStateEvent.HANDSHAKE_COMPLETE);
+
+        verify(liveMessageService).handleJoinRoom(org.mockito.ArgumentMatchers.eq(context),
+                org.mockito.ArgumentMatchers.argThat(join -> "room-1".equals(join.getData().getRoomId())));
     }
 
     @Test
@@ -154,6 +171,7 @@ class NettyServerHandlerTest {
         @SuppressWarnings("unchecked") io.netty.util.Attribute<String> requestedRoom = mock(io.netty.util.Attribute.class);
         @SuppressWarnings("unchecked") io.netty.util.Attribute<String> traceId = mock(io.netty.util.Attribute.class);
         @SuppressWarnings("unchecked") io.netty.util.Attribute<Long> storedLastSeq = mock(io.netty.util.Attribute.class);
+        @SuppressWarnings("unchecked") io.netty.util.Attribute<String> roomId = mock(io.netty.util.Attribute.class);
         when(context.channel()).thenReturn(channel);
         when(channel.attr(SessionManager.KEY_USER_ID)).thenReturn(userId);
         when(channel.attr(SessionManager.KEY_DEVICE_ID)).thenReturn(deviceId);
@@ -161,6 +179,7 @@ class NettyServerHandlerTest {
         when(channel.attr(SessionManager.KEY_REQUESTED_ROOM_ID)).thenReturn(requestedRoom);
         when(channel.attr(SessionManager.KEY_TRACE_ID)).thenReturn(traceId);
         when(channel.attr(SessionManager.KEY_LAST_SEQ)).thenReturn(storedLastSeq);
+        when(channel.attr(SessionManager.KEY_ROOM_ID)).thenReturn(roomId);
         when(userId.get()).thenReturn(1001L);
         when(deviceId.get()).thenReturn("device-1");
         when(scope.get()).thenReturn(ConnectionScope.ROOM);

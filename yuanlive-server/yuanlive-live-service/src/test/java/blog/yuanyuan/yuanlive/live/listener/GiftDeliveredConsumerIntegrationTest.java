@@ -10,12 +10,11 @@ import blog.yuanyuan.yuanlive.live.service.exception.InvalidGiftDeliveredEventEx
 import blog.yuanyuan.yuanlive.live.service.exception.TransientGiftDeliveryException;
 import blog.yuanyuan.yuanlive.live.service.impl.GiftDeliveredInboxServiceImpl;
 import blog.yuanyuan.yuanlive.live.service.impl.GiftRealtimePublisherImpl;
+import blog.yuanyuan.yuanlive.live.realtime.replay.RoomRealtimeEventPublisher;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
-import org.springframework.amqp.core.Binding;
-import org.springframework.amqp.core.BindingBuilder;
 import org.springframework.amqp.core.Message;
 import org.springframework.amqp.core.MessageProperties;
 import org.springframework.amqp.core.Queue;
@@ -23,10 +22,10 @@ import org.springframework.amqp.core.TopicExchange;
 import org.springframework.amqp.rabbit.core.RabbitAdmin;
 import org.springframework.amqp.rabbit.core.RabbitTemplate;
 import org.springframework.beans.factory.annotation.Autowired;
-import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.boot.test.context.TestConfiguration;
 import org.springframework.boot.test.mock.mockito.SpyBean;
+import org.springframework.boot.test.mock.mockito.MockBean;
 import org.springframework.boot.SpringBootConfiguration;
 import org.springframework.boot.autoconfigure.EnableAutoConfiguration;
 import org.springframework.context.annotation.Bean;
@@ -48,7 +47,6 @@ import java.net.http.HttpResponse;
 import java.nio.charset.StandardCharsets;
 import java.time.Duration;
 import java.util.Base64;
-import java.util.Set;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.awaitility.Awaitility.await;
@@ -75,14 +73,9 @@ import static org.mockito.Mockito.verify;
 class GiftDeliveredConsumerIntegrationTest {
 
     private static final String DOMAIN_EXCHANGE = "wallet.domain.exchange";
-    private static final String DISPLAY_QUEUE = "live.gift.delivered.display.integration.queue";
     private static final String DEAD_QUEUE = "live.gift.delivered.dead.queue";
     private static final String SOURCE_QUEUE = GiftDeliveryRabbitTopology.GIFT_DELIVERED_QUEUE;
     private static final HttpClient MANAGEMENT_CLIENT = HttpClient.newHttpClient();
-    private static final Set<String> DISPLAY_FIELDS = Set.of(
-            "eventId", "orderNo", "roomId", "senderId", "anchorId", "giftId", "giftCode", "giftName",
-            "giftIcon", "giftCount", "unitCoinAmount", "coinAmount", "exchangeRate", "platformRate",
-            "platformCoinAmount", "anchorIncomeAmount", "settlementRuleVersion");
 
     @Container
     private static final MySQLContainer<?> MYSQL = new MySQLContainer<>("mysql:8.0.44-debian")
@@ -107,15 +100,14 @@ class GiftDeliveredConsumerIntegrationTest {
     @Autowired
     private ObjectMapper objectMapper;
 
-    @Autowired
-    @Qualifier("giftDisplayBinding")
-    private Binding giftDisplayBinding;
-
     @SpyBean
     private GiftRealtimePublisher giftRealtimePublisher;
 
     @SpyBean
     private GiftDeliveredInboxService giftDeliveredInboxService;
+
+    @MockBean
+    private RoomRealtimeEventPublisher roomRealtimeEventPublisher;
 
     @DynamicPropertySource
     static void configureContainers(DynamicPropertyRegistry registry) {
@@ -132,21 +124,13 @@ class GiftDeliveredConsumerIntegrationTest {
     void cleanState() {
         jdbcTemplate.update("DELETE FROM live_inbox_event");
         rabbitAdmin.purgeQueue(SOURCE_QUEUE, true);
-        rabbitAdmin.purgeQueue(DISPLAY_QUEUE, true);
         rabbitAdmin.purgeQueue(DEAD_QUEUE, true);
-        rabbitAdmin.declareBinding(giftDisplayBinding);
     }
 
     @Test
-    void firstEventCreatesInboxAcknowledgesAndPublishesCompleteDisplayPayload() throws Exception {
+    void firstEventCreatesInboxAcknowledgesAndPublishesRoomDisplayEvent() throws Exception {
         publish(event("gift-event-001"));
 
-        Message display = receiveDisplayMessage();
-        JsonNode payload = objectMapper.readTree(new String(display.getBody(), StandardCharsets.UTF_8));
-        assertThat(payload.fieldNames()).toIterable().containsAll(DISPLAY_FIELDS);
-        assertThat(payload.path("eventId").asText()).isEqualTo("gift-event-001");
-        assertThat(payload.path("orderNo").asText()).isEqualTo("gift-order-001");
-        assertThat(payload.path("coinAmount").asLong()).isEqualTo(300L);
         await().atMost(Duration.ofSeconds(5)).untilAsserted(() -> {
             assertThat(inboxCount("gift-event-001")).isEqualTo(1L);
             assertThat(inboxStatus("gift-event-001")).isEqualTo("SUCCEEDED");
@@ -158,8 +142,6 @@ class GiftDeliveredConsumerIntegrationTest {
     void duplicateEventAcknowledgesWithoutPublishingDisplayTwice() {
         String event = event("gift-event-duplicate");
         publish(event);
-        receiveDisplayMessage();
-
         publish(event);
 
         await().atMost(Duration.ofSeconds(5)).untilAsserted(() -> {
@@ -167,7 +149,6 @@ class GiftDeliveredConsumerIntegrationTest {
             assertThat(inboxCount("gift-event-duplicate")).isEqualTo(1L);
             assertThat(queueState(SOURCE_QUEUE)).isEqualTo(QueueState.EMPTY);
         });
-        assertThat(rabbitTemplate.receive(DISPLAY_QUEUE, 1_000)).isNull();
     }
 
     @Test
@@ -179,7 +160,6 @@ class GiftDeliveredConsumerIntegrationTest {
 
         publish(event("gift-event-retry"));
 
-        assertThat(receiveDisplayMessage()).isNotNull();
         await().atMost(Duration.ofSeconds(5)).untilAsserted(() -> {
             assertThat(inboxCount("gift-event-retry")).isEqualTo(1L);
             assertThat(inboxStatus("gift-event-retry")).isEqualTo("SUCCEEDED");
@@ -203,31 +183,11 @@ class GiftDeliveredConsumerIntegrationTest {
     }
 
     @Test
-    void unroutableDisplayReturnPreventsAcknowledgementAndMovesEventToDeadLetterQueue() {
-        rabbitAdmin.removeBinding(giftDisplayBinding);
-
-        publish(event("gift-event-return"));
-
-        Message deadLetter = rabbitTemplate.receive(DEAD_QUEUE, 12_000);
-        assertThat(deadLetter).isNotNull();
-        assertThat(new String(deadLetter.getBody(), StandardCharsets.UTF_8)).contains("gift-event-return");
-        assertThat(inboxCount("gift-event-return")).isZero();
-        // 展示发布 Confirm 超时最多 5 秒，叠加 1/2/4 秒有限重试后再等待源队列完成 reject。
-        await().atMost(Duration.ofSeconds(15)).untilAsserted(() ->
-                assertThat(queueState(SOURCE_QUEUE)).isEqualTo(QueueState.EMPTY));
-    }
-
     private void publish(String payload) {
         MessageProperties properties = new MessageProperties();
         properties.setContentType(MessageProperties.CONTENT_TYPE_JSON);
         rabbitTemplate.send(DOMAIN_EXCHANGE, "gift.delivered",
                 new Message(payload.getBytes(StandardCharsets.UTF_8), properties));
-    }
-
-    private Message receiveDisplayMessage() {
-        Message message = rabbitTemplate.receive(DISPLAY_QUEUE, 10_000);
-        assertThat(message).isNotNull();
-        return message;
     }
 
     private long inboxCount(String eventId) {
@@ -288,17 +248,6 @@ class GiftDeliveredConsumerIntegrationTest {
             return new TopicExchange("wallet.domain.dlx", true, false);
         }
 
-        @Bean
-        Queue giftDisplayQueue() {
-            return new Queue(DISPLAY_QUEUE, true, false, false);
-        }
-
-        @Bean
-        Binding giftDisplayBinding(
-                @Qualifier("giftDisplayQueue") Queue giftDisplayQueue,
-                @Qualifier("liveRealtimeBroadcastExchange") org.springframework.amqp.core.FanoutExchange exchange) {
-            return BindingBuilder.bind(giftDisplayQueue).to(exchange);
-        }
     }
 
     @SpringBootConfiguration

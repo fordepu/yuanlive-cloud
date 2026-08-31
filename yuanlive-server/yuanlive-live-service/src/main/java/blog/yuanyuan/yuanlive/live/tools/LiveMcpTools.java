@@ -3,16 +3,14 @@ package blog.yuanyuan.yuanlive.live.tools;
 import blog.yuanyuan.yuanlive.live.domain.dto.SrsCallBackDTO;
 import blog.yuanyuan.yuanlive.live.message.notification.SystemNotification;
 import blog.yuanyuan.yuanlive.live.properties.LiveRoomProperties;
-import blog.yuanyuan.yuanlive.live.server.SessionManager;
+import blog.yuanyuan.yuanlive.live.realtime.dispatch.AppRealtimeEventPublisher;
+import blog.yuanyuan.yuanlive.live.realtime.replay.RoomRealtimeEventPublisher;
 import blog.yuanyuan.yuanlive.live.service.LiveRoomService;
 import cn.dev33.satoken.stp.StpUtil;
-import cn.hutool.json.JSONUtil;
 import jakarta.annotation.Resource;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.ai.tool.annotation.Tool;
 import org.springframework.ai.tool.annotation.ToolParam;
-import org.springframework.amqp.rabbit.core.RabbitTemplate;
-import org.springframework.beans.factory.annotation.Value;
 import org.springframework.data.redis.core.StringRedisTemplate;
 import org.springframework.http.HttpMethod;
 import org.springframework.http.ResponseEntity;
@@ -27,15 +25,15 @@ import java.util.Map;
 @Slf4j
 public class LiveMcpTools {
     @Resource
-    private RabbitTemplate rabbitTemplate;
+    private RoomRealtimeEventPublisher roomRealtimeEventPublisher;
+    @Resource
+    private AppRealtimeEventPublisher appRealtimeEventPublisher;
     @Resource
     private LiveRoomProperties liveRoomProperties;
     @Resource
     private RestTemplate restTemplate;
     @Resource
     private StringRedisTemplate stringRedisTemplate;
-    @Value("${live.mq.chat.exchange}")
-    private String exchange;
 
     @Tool(description = "在直播间公屏发布系统公告，警告全体观众")
     public String broadcast(@ToolParam(description = "直播间房间ID") String roomId) {
@@ -56,7 +54,7 @@ public class LiveMcpTools {
                 .data(systemData)
                 .roomId(roomId)
                 .build();
-        rabbitTemplate.convertAndSend(exchange, "", JSONUtil.toJsonStr(notification));
+        roomRealtimeEventPublisher.publish(notification);
         return "全体广播已发送至房间: " + roomId;
     }
 
@@ -86,7 +84,7 @@ public class LiveMcpTools {
                 .data(systemData)
                 .userId(uid)
                 .build();
-        rabbitTemplate.convertAndSend(exchange, "", JSONUtil.toJsonStr(notification));
+        appRealtimeEventPublisher.publish(uid, notification);
         return "警告已发送至主播: " + roomId;
     }
 

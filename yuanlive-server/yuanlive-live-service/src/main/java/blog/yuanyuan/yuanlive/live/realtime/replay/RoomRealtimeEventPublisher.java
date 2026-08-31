@@ -28,9 +28,21 @@ public class RoomRealtimeEventPublisher {
         }
         String eventId = StrUtil.isBlank(message.getMsgId()) ? UUID.randomUUID().toString() : message.getMsgId();
         long timestamp = message.getTimestamp() == null ? System.currentTimeMillis() / 1000 : message.getTimestamp();
-        RealtimeEvent event = buffer.append(message.getRoomId(), eventId, message.getCmd().name(), timestamp,
-                objectMapper.valueToTree(message));
-        dispatcher.dispatchToRoom(message.getRoomId(), event);
+        RealtimeEvent event = publish(message.getRoomId(), eventId, message.getCmd().name(), message, timestamp);
+        return event;
+    }
+
+    /** 非 WebSocket 来源的房间展示事件也必须进入同一缓冲与定向投递链路。 */
+    public RealtimeEvent publish(String roomId, String eventId, String type, Object data) {
+        return publish(roomId, eventId, type, data, System.currentTimeMillis() / 1000);
+    }
+
+    private RealtimeEvent publish(String roomId, String eventId, String type, Object data, long timestamp) {
+        if (StrUtil.isBlank(roomId) || StrUtil.isBlank(eventId) || StrUtil.isBlank(type)) {
+            throw new IllegalArgumentException("房间实时事件缺少roomId、eventId或type");
+        }
+        RealtimeEvent event = buffer.append(roomId, eventId, type, timestamp, objectMapper.valueToTree(data));
+        dispatcher.dispatchToRoom(roomId, event);
         return event;
     }
 }
